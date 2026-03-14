@@ -220,8 +220,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             crate::cli::init::run_init(&path, tools.as_deref(), force, profile.as_deref())?;
         }
-        Commands::Update { path, force } => {
-            println!("update: path={}, force={}", path, force);
+        Commands::Update { path: _path, force } => {
+            crate::cli::update::run_update(force)?;
         }
         Commands::List {
             specs,
