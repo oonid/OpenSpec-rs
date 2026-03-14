@@ -1,0 +1,26 @@
+[package]
+name = "openspec"
+version = "0.1.0"
+edition = "2021"
+description = "AI-native system for spec-driven development"
+license = "MIT"
+repository = "https://github.com/oonid/OpenSpec-rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+pulldown-cmark = "0.10"
+walkdir = "2"
+glob = "0.3"
+termcolor = "1"
+indicatif = "0.17"
+inquire = "0.7"
+anyhow = "1"
+thiserror = "1"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"
