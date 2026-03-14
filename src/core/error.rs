@@ -140,3 +140,9 @@ impl From<serde_yaml::Error> for OpenSpecError {
         Self::yaml_parse("yaml", err.to_string())
     }
 }
+
+impl From<serde_json::Error> for OpenSpecError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::Custom(err.to_string())
+    }
+}
