@@ -4,7 +4,10 @@ use std::path::Path;
 use crate::ai_tools::generator::{get_tool_by_value, AI_TOOLS};
 use crate::core::config::ProjectConfig;
 use crate::core::error::{OpenSpecError, Result};
-use crate::templates::{generate_skill_content, get_skill_templates};
+use crate::templates::{
+    generate_commands, generate_skill_content, get_adapter, get_command_contents,
+    get_skill_templates,
+};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const DEFAULT_SCHEMA: &str = "spec-driven";
@@ -186,6 +189,7 @@ pub fn generate_skills_for_tools(project_path: &Path, tools: &[String]) -> Resul
     }
 
     let skill_entries = get_skill_templates(None);
+    let command_contents = get_command_contents(None);
 
     for tool_id in tools {
         let tool = match get_tool_by_value(tool_id) {
@@ -213,7 +217,27 @@ pub fn generate_skills_for_tools(project_path: &Path, tools: &[String]) -> Resul
                 .map_err(|e| OpenSpecError::Custom(format!("Failed to write skill file: {}", e)))?;
         }
 
-        println!(" {} skills configured", skill_entries.len());
+        if let Some(adapter) = get_adapter(tool_id) {
+            let generated_commands = generate_commands(&command_contents, adapter.as_ref());
+
+            for cmd in generated_commands {
+                let cmd_path = project_path.join(&cmd.path);
+                if let Some(parent) = cmd_path.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| {
+                        OpenSpecError::Custom(format!("Failed to create commands directory: {}", e))
+                    })?;
+                }
+                std::fs::write(&cmd_path, &cmd.file_content).map_err(|e| {
+                    OpenSpecError::Custom(format!("Failed to write command file: {}", e))
+                })?;
+            }
+        }
+
+        println!(
+            " {} skills, {} commands configured",
+            skill_entries.len(),
+            command_contents.len()
+        );
     }
 
     Ok(())
