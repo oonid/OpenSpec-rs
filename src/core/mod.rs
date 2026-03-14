@@ -3,3 +3,5 @@ pub mod config;
 pub mod error;
 pub mod schema;
 pub mod spec_parser;
+
+pub use error::{OpenSpecError, Result};
