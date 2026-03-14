@@ -292,10 +292,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             skip_specs,
             no_validate,
         } => {
-            println!(
-                "archive: name={:?}, yes={}, skip_specs={}, no_validate={}",
-                name, yes, skip_specs, no_validate
-            );
+            crate::cli::archive::run_archive(name.as_deref(), yes, skip_specs, no_validate)?;
         }
         Commands::Config { set, get, list } => {
             crate::cli::config::run_config(set.as_deref(), get.as_deref(), list)?;

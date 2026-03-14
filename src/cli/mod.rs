@@ -1,3 +1,4 @@
+mod archive;
 mod args;
 mod config;
 mod init;
