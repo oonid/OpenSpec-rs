@@ -93,7 +93,7 @@ impl Output {
     }
 
     pub fn divider(&self, ch: char, width: usize) -> io::Result<()> {
-        let line: String = std::iter::repeat(ch).take(width).collect();
+        let line: String = std::iter::repeat_n(ch, width).collect();
         self.print_colored(&self.stdout, &line, None)
     }
 
