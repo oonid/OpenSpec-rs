@@ -162,8 +162,8 @@ pub fn run_complete(complete_type: &str) -> Result<(), Box<dyn std::error::Error
                     if entry.file_type()?.is_dir() {
                         let name = entry.file_name().to_string_lossy().to_string();
                         if name != "archive" && !name.starts_with('.') {
-                            let proposal_path = entry.path().join("proposal.md");
-                            if proposal_path.exists() {
+                            let metadata_path = entry.path().join(".openspec.yaml");
+                            if metadata_path.exists() {
                                 println!("{}\tactive change", name);
                             }
                         }

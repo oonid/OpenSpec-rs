@@ -61,22 +61,29 @@ pub fn run_show(name: &str, item_type: Option<&str>, json: bool, _deltas_only: b
 }
 
 fn show_change(project_root: &std::path::Path, change_name: &str, json: bool) -> Result<()> {
-    let proposal_path = project_root
+    let change_dir = project_root
         .join(OPENSPEC_DIR_NAME)
         .join("changes")
-        .join(change_name)
-        .join("proposal.md");
+        .join(change_name);
 
-    if !proposal_path.exists() {
+    let proposal_path = change_dir.join("proposal.md");
+    let readme_path = change_dir.join("README.md");
+
+    let (_content_path, content) = if proposal_path.exists() {
+        let c = std::fs::read_to_string(&proposal_path)
+            .map_err(|e| OpenSpecError::Custom(format!("Failed to read proposal: {}", e)))?;
+        (proposal_path, c)
+    } else if readme_path.exists() {
+        let c = std::fs::read_to_string(&readme_path)
+            .map_err(|e| OpenSpecError::Custom(format!("Failed to read README: {}", e)))?;
+        (readme_path, c)
+    } else {
         return Err(OpenSpecError::Custom(format!(
-            "Change '{}' not found at {}",
+            "Change '{}' not found - no proposal.md or README.md at {}",
             change_name,
-            proposal_path.display()
+            change_dir.display()
         )));
-    }
-
-    let content = std::fs::read_to_string(&proposal_path)
-        .map_err(|e| OpenSpecError::Custom(format!("Failed to read proposal: {}", e)))?;
+    };
 
     if json {
         let title = extract_title(&content, change_name);
@@ -188,8 +195,8 @@ fn get_available_changes(project_root: &std::path::Path) -> Result<Vec<String>> 
         if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             let name = entry.file_name().to_string_lossy().to_string();
             if name != "archive" && !name.starts_with('.') {
-                let proposal_path = changes_dir.join(&name).join("proposal.md");
-                if proposal_path.exists() {
+                let metadata_path = changes_dir.join(&name).join(".openspec.yaml");
+                if metadata_path.exists() {
                     changes.push(name);
                 }
             }
