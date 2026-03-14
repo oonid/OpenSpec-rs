@@ -260,10 +260,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             r#type,
             deltas_only,
         } => {
-            println!(
-                "show: name={:?}, json={}, type={:?}, deltas_only={}",
-                name, json, r#type, deltas_only
-            );
+            let name = name.as_deref().ok_or_else(|| {
+                crate::core::error::OpenSpecError::Custom(
+                    "Missing required argument <name>".to_string(),
+                )
+            })?;
+            crate::cli::show::run_show(name, r#type.as_deref(), json, deltas_only)?;
         }
         Commands::Validate {
             name,
@@ -274,10 +276,15 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             strict,
             json,
         } => {
-            println!(
-                "validate: name={:?}, all={}, changes={}, specs={}, type={:?}, strict={}, json={}",
-                name, all, changes, specs, r#type, strict, json
-            );
+            crate::cli::validate::run_validate(
+                name.as_deref(),
+                all,
+                changes,
+                specs,
+                r#type.as_deref(),
+                strict,
+                json,
+            )?;
         }
         Commands::Archive {
             name,
@@ -291,7 +298,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         Commands::Config { set, get, list } => {
-            println!("config: set={:?}, get={:?}, list={}", set, get, list);
+            crate::cli::config::run_config(set.as_deref(), get.as_deref(), list)?;
         }
         Commands::New(NewCommands::Change {
             name,
