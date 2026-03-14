@@ -205,6 +205,13 @@ pub enum CompletionCommands {
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    // Handle __complete command before clap parsing (to avoid clap_complete issues)
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 3 && args[1] == "__complete" {
+        crate::cli::completion::run_complete(&args[2])?;
+        return Ok(());
+    }
+
     let cli = Cli::parse();
 
     if cli.no_color {
@@ -310,13 +317,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Completion(cmd) => match cmd {
             CompletionCommands::Generate { shell } => {
-                println!("completion generate: shell={:?}", shell);
+                crate::cli::completion::run_completion_generate(shell.as_deref())?;
             }
             CompletionCommands::Install { shell, verbose } => {
-                println!("completion install: shell={:?}, verbose={}", shell, verbose);
+                crate::cli::completion::run_completion_install(shell.as_deref(), verbose)?;
             }
-            CompletionCommands::Uninstall { shell, yes } => {
-                println!("completion uninstall: shell={:?}, yes={}", shell, yes);
+            CompletionCommands::Uninstall { shell, yes: _yes } => {
+                crate::cli::completion::run_completion_uninstall(shell.as_deref(), _yes)?;
             }
         },
     }
