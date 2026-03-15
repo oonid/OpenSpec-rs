@@ -25,6 +25,8 @@ regex = "1"
 atty = "0.2"
 chrono = "0.4"
 clap_complete = "4"
+ureq = { version = "2", features = ["json"] }
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 tempfile = "3"

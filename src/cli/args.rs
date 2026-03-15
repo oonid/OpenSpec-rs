@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Parser, Debug)]
 #[command(name = "openspec")]
 #[command(author, version, about, long_about = None)]
@@ -204,6 +206,27 @@ pub enum CompletionCommands {
     },
 }
 
+fn get_command_path(cli: &Cli) -> String {
+    match &cli.command {
+        Commands::Init { .. } => "init".to_string(),
+        Commands::Update { .. } => "update".to_string(),
+        Commands::List { .. } => "list".to_string(),
+        Commands::Status { .. } => "status".to_string(),
+        Commands::Instructions { .. } => "instructions".to_string(),
+        Commands::Schemas { .. } => "schemas".to_string(),
+        Commands::Show { .. } => "show".to_string(),
+        Commands::Validate { .. } => "validate".to_string(),
+        Commands::Archive { .. } => "archive".to_string(),
+        Commands::Config { .. } => "config".to_string(),
+        Commands::New(NewCommands::Change { .. }) => "new:change".to_string(),
+        Commands::Completion(cmd) => match cmd {
+            CompletionCommands::Generate { .. } => "completion:generate".to_string(),
+            CompletionCommands::Install { .. } => "completion:install".to_string(),
+            CompletionCommands::Uninstall { .. } => "completion:uninstall".to_string(),
+        },
+    }
+}
+
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Handle __complete command before clap parsing (to avoid clap_complete issues)
     let args: Vec<String> = std::env::args().collect();
@@ -217,6 +240,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     if cli.no_color {
         unsafe { std::env::set_var("NO_COLOR", "1") };
     }
+
+    // Telemetry: show first-run notice and track command
+    crate::telemetry::maybe_show_telemetry_notice();
+    let command_path = get_command_path(&cli);
+    crate::telemetry::track_command(&command_path, VERSION);
 
     match cli.command {
         Commands::Init {
@@ -327,6 +355,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
     }
+
+    // Telemetry: flush pending events before exit
+    crate::telemetry::flush_and_shutdown();
 
     Ok(())
 }
