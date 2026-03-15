@@ -570,7 +570,12 @@ artifacts:
 
     #[test]
     fn test_load_schema_file() {
-        let result = load_schema("vendor/OpenSpec/schemas/spec-driven/schema.yaml");
+        let schema_path = "vendor/OpenSpec/schemas/spec-driven/schema.yaml";
+        if !std::path::Path::new(schema_path).exists() {
+            eprintln!("Skipping test_load_schema_file: vendor directory not available");
+            return;
+        }
+        let result = load_schema(schema_path);
         assert!(result.is_ok());
         let schema = result.unwrap();
         assert_eq!(schema.name, "spec-driven");
