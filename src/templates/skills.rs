@@ -59,6 +59,24 @@ pub const SKILL_ARCHIVE_CHANGE: SkillTemplate = SkillTemplate {
     metadata: &SKILL_METADATA,
 };
 
+pub const SKILL_VERIFY_CHANGE: SkillTemplate = SkillTemplate {
+    name: "openspec-verify-change",
+    description: "Verify implementation matches change artifacts (specs, tasks, design).",
+    instructions: include_str!("../../templates/skills/verify-change.md"),
+    license: "MIT",
+    compatibility: "Requires openspec CLI.",
+    metadata: &SKILL_METADATA,
+};
+
+pub const SKILL_SYNC_SPECS: SkillTemplate = SkillTemplate {
+    name: "openspec-sync-specs",
+    description: "Sync delta specs from a change to main specs.",
+    instructions: include_str!("../../templates/skills/sync-specs.md"),
+    license: "MIT",
+    compatibility: "Requires openspec CLI.",
+    metadata: &SKILL_METADATA,
+};
+
 pub const SKILL_ENTRIES: &[SkillEntry] = &[
     SkillEntry {
         template: &SKILL_EXPLORE,
@@ -79,6 +97,16 @@ pub const SKILL_ENTRIES: &[SkillEntry] = &[
         template: &SKILL_ARCHIVE_CHANGE,
         dir_name: "openspec-archive-change",
         workflow_id: "archive",
+    },
+    SkillEntry {
+        template: &SKILL_VERIFY_CHANGE,
+        dir_name: "openspec-verify-change",
+        workflow_id: "verify",
+    },
+    SkillEntry {
+        template: &SKILL_SYNC_SPECS,
+        dir_name: "openspec-sync-specs",
+        workflow_id: "sync",
     },
 ];
 
