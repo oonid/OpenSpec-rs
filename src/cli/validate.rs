@@ -1,6 +1,6 @@
 use crate::core::config::OPENSPEC_DIR_NAME;
 use crate::core::error::{OpenSpecError, Result};
-use crate::core::spec_parser::{parse_delta_spec, SpecParser};
+use crate::core::spec_parser::{parse_delta_spec, RequirementBlock, SpecParser};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ValidationIssue {
@@ -415,12 +415,26 @@ fn validate_change(change_dir: &std::path::Path, _strict: bool) -> Result<Valida
 
             for req in &plan.added {
                 total_deltas += 1;
-                if !contains_shall_or_must(&req.raw) {
-                    issues.push(ValidationIssue {
-                        level: "ERROR".to_string(),
-                        path: entry_path.clone(),
-                        message: format!("ADDED \"{}\" must contain SHALL or MUST", req.name),
-                    });
+                // `raw` includes the header line, so check the body specifically: a
+                // requirement whose only SHALL/MUST is in the header still needs the keyword
+                // moved into the body.
+                if !contains_shall_or_must(requirement_body(req)) {
+                    if contains_shall_or_must(&req.header_line) {
+                        issues.push(ValidationIssue {
+                            level: "ERROR".to_string(),
+                            path: entry_path.clone(),
+                            message: format!(
+                                "ADDED \"{}\": normative keyword (SHALL/MUST) found only in header. Move the keyword to the requirement body.",
+                                req.name
+                            ),
+                        });
+                    } else {
+                        issues.push(ValidationIssue {
+                            level: "ERROR".to_string(),
+                            path: entry_path.clone(),
+                            message: format!("ADDED \"{}\" must contain SHALL or MUST", req.name),
+                        });
+                    }
                 }
                 if count_scenarios(&req.raw) < 1 {
                     issues.push(ValidationIssue {
@@ -436,12 +450,23 @@ fn validate_change(change_dir: &std::path::Path, _strict: bool) -> Result<Valida
 
             for req in &plan.modified {
                 total_deltas += 1;
-                if !contains_shall_or_must(&req.raw) {
-                    issues.push(ValidationIssue {
-                        level: "ERROR".to_string(),
-                        path: entry_path.clone(),
-                        message: format!("MODIFIED \"{}\" must contain SHALL or MUST", req.name),
-                    });
+                if !contains_shall_or_must(requirement_body(req)) {
+                    if contains_shall_or_must(&req.header_line) {
+                        issues.push(ValidationIssue {
+                            level: "ERROR".to_string(),
+                            path: entry_path.clone(),
+                            message: format!(
+                                "MODIFIED \"{}\": normative keyword (SHALL/MUST) found only in header. Move the keyword to the requirement body.",
+                                req.name
+                            ),
+                        });
+                    } else {
+                        issues.push(ValidationIssue {
+                            level: "ERROR".to_string(),
+                            path: entry_path.clone(),
+                            message: format!("MODIFIED \"{}\" must contain SHALL or MUST", req.name),
+                        });
+                    }
                 }
                 if count_scenarios(&req.raw) < 1 {
                     issues.push(ValidationIssue {
@@ -647,9 +672,65 @@ fn contains_shall_or_must(text: &str) -> bool {
     text.to_uppercase().contains("SHALL") || text.to_uppercase().contains("MUST")
 }
 
+/// Returns the requirement body (the `raw` block with its `### Requirement:` header line
+/// stripped). `raw` always begins with `header_line`, so this isolates the body text used
+/// to decide whether the normative keyword lives in the body or only in the header.
+fn requirement_body(req: &RequirementBlock) -> &str {
+    req.raw
+        .strip_prefix(req.header_line.as_str())
+        .unwrap_or(&req.raw)
+}
+
 fn count_scenarios(block_raw: &str) -> usize {
     block_raw
         .lines()
         .filter(|line| line.trim().starts_with("#### "))
         .count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_contains_shall_or_must() {
+        assert!(contains_shall_or_must("The system SHALL do something"));
+        assert!(contains_shall_or_must("The system MUST do something"));
+        assert!(contains_shall_or_must("The system shall do something"));
+        assert!(contains_shall_or_must("The system must do something"));
+        assert!(!contains_shall_or_must("The system should do something"));
+        assert!(!contains_shall_or_must("The system may do something"));
+    }
+
+    fn block(header: &str, body: &str) -> RequirementBlock {
+        RequirementBlock {
+            header_line: header.to_string(),
+            name: "x".to_string(),
+            raw: format!("{}\n{}", header, body),
+        }
+    }
+
+    #[test]
+    fn test_requirement_body_strips_header() {
+        let req = block("### Requirement: Foo", "The system SHALL do it.");
+        assert_eq!(requirement_body(&req), "\nThe system SHALL do it.");
+    }
+
+    #[test]
+    fn test_keyword_only_in_header_flagged_via_body() {
+        // SHALL only in the header → body lacks the keyword, so validation must still flag it.
+        let header_only = block(
+            "### Requirement: SHALL validate input",
+            "The validation logic processes the data.",
+        );
+        assert!(contains_shall_or_must(header_only.header_line.as_str()));
+        assert!(!contains_shall_or_must(requirement_body(&header_only)));
+
+        // Keyword in the body → body check passes, no error.
+        let in_body = block(
+            "### Requirement: Validate input",
+            "The system SHALL validate the input data.",
+        );
+        assert!(contains_shall_or_must(requirement_body(&in_body)));
+    }
 }

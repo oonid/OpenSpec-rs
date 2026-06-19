@@ -372,7 +372,7 @@ struct SectionLookup {
     found: bool,
 }
 
-const REQUIREMENT_HEADER_REGEX: &str = r"^###\s*Requirement:\s*(.+?)\s*$";
+const REQUIREMENT_HEADER_REGEX: &str = r"(?i)^###\s*Requirement:\s*(.+?)\s*$";
 
 fn parse_requirement_blocks_from_section(section_body: &str) -> Vec<RequirementBlock> {
     if section_body.trim().is_empty() {
@@ -422,7 +422,7 @@ fn parse_removed_names(section_body: &str) -> Vec<String> {
 
     let mut names: Vec<String> = Vec::new();
     let re = regex::Regex::new(REQUIREMENT_HEADER_REGEX).unwrap();
-    let bullet_re = regex::Regex::new(r"^\s*-\s*`?###\s*Requirement:\s*(.+?)`?\s*$").unwrap();
+    let bullet_re = regex::Regex::new(r"(?i)^\s*-\s*`?###\s*Requirement:\s*(.+?)`?\s*$").unwrap();
 
     for line in section_body.lines() {
         if let Some(caps) = re.captures(line) {
@@ -442,8 +442,8 @@ fn parse_renamed_pairs(section_body: &str) -> Vec<RenamePair> {
 
     let mut pairs: Vec<RenamePair> = Vec::new();
     let from_re =
-        regex::Regex::new(r"^\s*-?\s*FROM:\s*`?###\s*Requirement:\s*(.+?)`?\s*$").unwrap();
-    let to_re = regex::Regex::new(r"^\s*-?\s*TO:\s*`?###\s*Requirement:\s*(.+?)`?\s*$").unwrap();
+        regex::Regex::new(r"(?i)^\s*-?\s*FROM:\s*`?###\s*Requirement:\s*(.+?)`?\s*$").unwrap();
+    let to_re = regex::Regex::new(r"(?i)^\s*-?\s*TO:\s*`?###\s*Requirement:\s*(.+?)`?\s*$").unwrap();
 
     let mut current: Option<(Option<String>, Option<String>)> = None;
 
@@ -525,7 +525,7 @@ pub fn extract_requirements_section(content: &str) -> RequirementsSectionParts {
         let mut in_body = false;
 
         for line in section_body {
-            if line.trim().starts_with("### Requirement:") {
+            if line.trim().to_lowercase().starts_with("### requirement:") {
                 in_body = true;
             }
             if in_body {
@@ -1962,6 +1962,80 @@ Some purpose.
             .find(|u| u.spec_name == "existing-capability")
             .unwrap();
         assert!(existing_update.target_exists);
+    }
+
+    #[test]
+    fn test_parse_spec_lowercase_requirement_header() {
+        let content = r#"# test-spec Specification
+
+## Purpose
+This is the purpose of the spec.
+
+## Requirements
+### requirement: First Requirement
+The system SHALL do something.
+
+#### Scenario: First scenario
+- **WHEN** something happens
+- **THEN** something else happens
+"#;
+
+        let mut parser = SpecParser::new(content);
+        let spec = parser.parse_spec("test-spec").unwrap();
+
+        assert_eq!(spec.name, "test-spec");
+        assert_eq!(spec.requirements.len(), 1);
+        assert_eq!(spec.requirements[0].text, "The system SHALL do something.");
+    }
+
+    #[test]
+    fn test_parse_spec_mixed_case_requirement_header() {
+        let content = r#"# test-spec Specification
+
+## Purpose
+This is the purpose of the spec.
+
+## Requirements
+### REQUIREMENT: First Requirement
+The system SHALL do something.
+"#;
+
+        let mut parser = SpecParser::new(content);
+        let spec = parser.parse_spec("test-spec").unwrap();
+
+        assert_eq!(spec.requirements.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_spec_detects_requirement_inside_code_block() {
+        // The line-based parser intentionally detects requirement headers even when nested
+        // inside a fenced code block, so requirements "hidden" in code fences are not silently
+        // dropped during validation (upstream #995).
+        let content = r#"# test-spec Specification
+
+## Purpose
+This is the purpose of the spec.
+
+## Requirements
+```md
+### Requirement: Hidden In Fence
+The system SHALL still be detected.
+
+#### Scenario: Detected
+- **WHEN** a requirement is nested in a code block
+- **THEN** the parser still finds it
+```
+"#;
+
+        let mut parser = SpecParser::new(content);
+        let spec = parser.parse_spec("test-spec").unwrap();
+
+        assert_eq!(spec.requirements.len(), 1);
+        assert_eq!(
+            spec.requirements[0].text,
+            "The system SHALL still be detected."
+        );
+        assert_eq!(spec.requirements[0].scenarios.len(), 1);
     }
 
     #[test]

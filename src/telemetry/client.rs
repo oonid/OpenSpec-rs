@@ -143,6 +143,7 @@ pub fn track_command(command_name: &str, version: &str) {
     }
 
     let _ = ureq::post(&format!("{}/capture/", POSTHOG_HOST))
+        .timeout(std::time::Duration::from_secs(1))
         .set("Content-Type", "application/json")
         .send_json(&event);
 }
@@ -160,6 +161,7 @@ pub fn flush_and_shutdown() {
         if let Ok(mut events) = pending.lock() {
             for event in events.drain(..) {
                 let _ = ureq::post(&format!("{}/capture/", POSTHOG_HOST))
+                    .timeout(std::time::Duration::from_secs(1))
                     .set("Content-Type", "application/json")
                     .send_json(&event);
             }

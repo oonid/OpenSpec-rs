@@ -79,10 +79,13 @@ fn default_delivery() -> String {
 }
 
 fn default_workflows() -> Vec<String> {
+    // Matches upstream CORE_WORKFLOWS (profiles.ts): the 'core' profile installs exactly
+    // these five workflows. `verify` and others are not part of core.
     vec![
         "propose".to_string(),
         "explore".to_string(),
         "apply".to_string(),
+        "sync".to_string(),
         "archive".to_string(),
     ]
 }
