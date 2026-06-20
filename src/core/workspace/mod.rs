@@ -1,12 +1,14 @@
 pub mod foundation;
 pub mod legacy_state;
 pub mod openers;
+pub mod open_surface;
 pub mod registry;
 pub mod state_io;
 
 // Re-export main public types and functions for convenience
 pub use foundation::{
-    get_workspace_changes_dir, get_workspace_metadata_dir, get_workspace_view_state_path,
+    get_workspace_changes_dir, get_workspace_code_workspace_file_name, get_workspace_code_workspace_path,
+    get_workspace_context_initiative_id, get_workspace_metadata_dir, get_workspace_view_state_path,
     is_valid_workspace_link_name, is_valid_workspace_name, parse_workspace_view_state,
     serialize_workspace_view_state, validate_workspace_link_name, validate_workspace_name,
     write_file_atomically, parse_workspace_preferred_opener_value, validate_workspace_preferred_opener,
@@ -40,4 +42,14 @@ pub use legacy_state::{
 pub use state_io::{
     find_workspace_root, is_workspace_root, read_optional_workspace_view_state,
     read_workspace_view_state, workspace_changes_dir_exists, write_workspace_view_state,
+};
+
+pub use open_surface::{
+    apply_workspace_guidance_block, build_workspace_code_workspace_content,
+    build_workspace_guidance_block, resolve_workspace_open_links, sync_workspace_open_surface,
+    ResolvedContextStoreRef, ResolvedInitiativeRef, WorkspaceOpenLink,
+    WorkspaceOpenResolvedContext, WorkspaceOpenSurfaceGeneration, WorkspaceOpenSurfaceLinks,
+    WorkspaceSkippedOpenLink, WorkspaceSkippedReason, WORKSPACE_GUIDANCE_BODY,
+    WORKSPACE_GUIDANCE_END_MARKER, WORKSPACE_GUIDANCE_START_MARKER,
+    WORKSPACE_OPEN_INITIATIVE_FOLDER_LABEL, WORKSPACE_OPEN_ROOT_FOLDER_LABEL,
 };

@@ -263,6 +263,22 @@ pub fn write_file_atomically(path: &Path, content: &str) -> std::io::Result<()> 
     Ok(())
 }
 
+// Open-surface helpers
+pub fn get_workspace_context_initiative_id(context: &WorkspaceContext) -> String {
+    match context {
+        WorkspaceContext::Initiative { initiative, .. } => initiative.id.clone(),
+    }
+}
+
+pub fn get_workspace_code_workspace_file_name(name: &str) -> Result<String, String> {
+    validate_workspace_name(name)?;
+    Ok(format!("{}{}", name, WORKSPACE_CODE_WORKSPACE_EXTENSION))
+}
+
+pub fn get_workspace_code_workspace_path(workspace_root: &Path, name: &str) -> Result<PathBuf, String> {
+    Ok(workspace_root.join(get_workspace_code_workspace_file_name(name)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
