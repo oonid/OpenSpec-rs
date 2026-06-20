@@ -225,6 +225,8 @@ pub enum ContextStoreCommands {
         path: Option<String>,
         #[arg(long = "init-git", help = "Initialize a Git repository in the context store")]
         init_git: bool,
+        #[arg(long = "allow-inside-git-repository", help = "Allow the context store path to be inside an existing Git repository")]
+        allow_inside_git_repository: bool,
         #[arg(long, help = "Output as JSON")]
         json: bool,
     },

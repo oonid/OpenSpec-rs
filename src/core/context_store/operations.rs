@@ -173,6 +173,114 @@ fn is_git_repository_at_root(store_root: &Path) -> bool {
     matches!(path_kind(&git_path), PathKind::Directory | PathKind::File)
 }
 
+/// Find the containing git repository root for a given store path.
+/// Returns Some(git_root) if the store path is strictly inside a git repository,
+/// None otherwise or if a containing repo cannot be determined.
+fn find_containing_git_repository_root(store_root: &Path) -> Option<PathBuf> {
+    // Resolve the nearest existing ancestor directory of store_root.
+    // The store_root itself may not exist yet, so we walk up to find the first existing dir.
+    let mut check_path = store_root.to_path_buf();
+
+    // If store_root itself doesn't exist, go up to the parent.
+    if !check_path.exists() {
+        check_path = check_path.parent()?.to_path_buf();
+    }
+
+    // Walk up from check_path (or its parent if check_path is a file).
+    while check_path.exists() {
+        // Try git command first: `git -C <dir> rev-parse --show-toplevel`
+        if let Ok(output) = Command::new("git")
+            .arg("-C")
+            .arg(&check_path)
+            .arg("rev-parse")
+            .arg("--show-toplevel")
+            .output()
+        {
+            if output.status.success() {
+                if let Ok(git_root_str) = String::from_utf8(output.stdout) {
+                    let git_root_str = git_root_str.trim();
+                    let git_root = PathBuf::from(git_root_str);
+
+                    // Verify that git_root strictly contains store_root.
+                    // Canonicalize what we can; if store_root doesn't exist, use the absolute form.
+                    let store_abs = if store_root.is_absolute() {
+                        store_root.to_path_buf()
+                    } else {
+                        if let Ok(cwd) = std::env::current_dir() {
+                            cwd.join(store_root)
+                        } else {
+                            store_root.to_path_buf()
+                        }
+                    };
+
+                    // Canonicalize both for clean comparison if they exist.
+                    let git_root_canonical = git_root.canonicalize().unwrap_or(git_root);
+                    let store_abs_canonical = store_abs.canonicalize().unwrap_or(store_abs);
+
+                    // Check: git_root is a proper ancestor (not equal).
+                    if store_abs_canonical.starts_with(&git_root_canonical)
+                        && store_abs_canonical != git_root_canonical
+                    {
+                        return Some(git_root_canonical);
+                    }
+                    // If they're equal or git_root is not an ancestor, no containing repo.
+                    return None;
+                }
+            }
+        }
+
+        // Fallback: check if check_path itself is a git repository.
+        if is_git_repository_at_root(&check_path) {
+            // Verify containment the same way.
+            let store_abs = if store_root.is_absolute() {
+                store_root.to_path_buf()
+            } else {
+                if let Ok(cwd) = std::env::current_dir() {
+                    cwd.join(store_root)
+                } else {
+                    store_root.to_path_buf()
+                }
+            };
+
+            let check_canonical = check_path.canonicalize().unwrap_or(check_path.clone());
+            let store_abs_canonical = store_abs.canonicalize().unwrap_or(store_abs);
+
+            if store_abs_canonical.starts_with(&check_canonical)
+                && store_abs_canonical != check_canonical
+            {
+                return Some(check_canonical);
+            }
+            return None;
+        }
+
+        // Move up to parent.
+        check_path = check_path.parent()?.to_path_buf();
+    }
+
+    None
+}
+
+/// Assert that the store setup path is not nested inside an existing git repository.
+/// If allow_inside_git_repository is true, always succeeds.
+/// Otherwise, returns Err if the path is inside a git repo.
+fn assert_setup_path_not_nested_in_git_repo(
+    store_root: &Path,
+    allow_inside_git_repository: bool,
+) -> Result<(), String> {
+    if allow_inside_git_repository {
+        return Ok(());
+    }
+
+    if let Some(git_root) = find_containing_git_repository_root(store_root) {
+        return Err(format!(
+            "Context store setup path is inside another Git repository: {}",
+            git_root.display()
+        ));
+    }
+
+    Ok(())
+}
+
 /// Infer a store id from the final path component.
 /// Validates the inferred id against the context store id rules.
 fn infer_store_id_from_path(store_root: &Path) -> Result<String, String> {
@@ -195,11 +303,13 @@ fn infer_store_id_from_path(store_root: &Path) -> Result<String, String> {
 /// If `path` is None, uses the default managed location derived from `id`.
 /// If `path` is Some, uses that path (creating it if needed).
 /// If `init_git` is true, initializes a git repository.
+/// If `allow_inside_git_repository` is true, bypasses the check that prevents nesting in git repos.
 /// Returns MutationResult with store info, git status, and created artifacts.
 pub fn setup_context_store(
     id: Option<&str>,
     path: Option<&str>,
     init_git: bool,
+    allow_inside_git_repository: bool,
     global_data_dir: Option<&Path>,
 ) -> Result<MutationResult, String> {
     // Resolve the store id
@@ -233,6 +343,9 @@ pub fn setup_context_store(
             store_root.display()
         ));
     }
+
+    // Check that the store path is not nested in an existing git repository.
+    assert_setup_path_not_nested_in_git_repo(&store_root, allow_inside_git_repository)?;
 
     // If the directory doesn't exist, create it (with cleanup on failure).
     let created_dir = matches!(kind, PathKind::Missing);
@@ -640,6 +753,7 @@ mod tests {
             Some("test-store"),
             None,
             false,
+            false,
             global_data_dir,
         ).expect("setup failed");
 
@@ -673,6 +787,7 @@ mod tests {
             Some("git-store"),
             None,
             true,
+            false,
             global_data_dir,
         ).expect("setup failed");
 
@@ -690,11 +805,11 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // No id, no path → error
-        let result = setup_context_store(None, None, false, global_data_dir);
+        let result = setup_context_store(None, None, false, false, global_data_dir);
         assert!(result.is_err());
 
         // No id, has path → error
-        let result = setup_context_store(None, Some("/tmp/somepath"), false, global_data_dir);
+        let result = setup_context_store(None, Some("/tmp/somepath"), false, false, global_data_dir);
         assert!(result.is_err());
     }
 
@@ -707,6 +822,7 @@ mod tests {
         let setup_result = setup_context_store(
             Some("my-store"),
             None,
+            false,
             false,
             global_data_dir,
         ).expect("setup failed");
@@ -792,6 +908,7 @@ mod tests {
             Some("my-store"),
             None,
             false,
+            false,
             global_data_dir,
         ).expect("setup failed");
 
@@ -827,6 +944,7 @@ mod tests {
             Some("to-delete"),
             None,
             false,
+            false,
             global_data_dir,
         ).expect("setup failed");
 
@@ -856,6 +974,7 @@ mod tests {
             Some("no-meta"),
             None,
             false,
+            false,
             global_data_dir,
         ).expect("setup failed");
 
@@ -877,11 +996,11 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // Set up a few stores
-        setup_context_store(Some("store-a"), None, false, global_data_dir)
+        setup_context_store(Some("store-a"), None, false, false, global_data_dir)
             .expect("setup a");
-        setup_context_store(Some("store-b"), None, false, global_data_dir)
+        setup_context_store(Some("store-b"), None, false, false, global_data_dir)
             .expect("setup b");
-        setup_context_store(Some("store-c"), None, false, global_data_dir)
+        setup_context_store(Some("store-c"), None, false, false, global_data_dir)
             .expect("setup c");
 
         let result = list_context_stores(global_data_dir);
@@ -897,7 +1016,7 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // Set up a store
-        setup_context_store(Some("healthy-store"), None, false, global_data_dir)
+        setup_context_store(Some("healthy-store"), None, false, false, global_data_dir)
             .expect("setup failed");
 
         // Doctor all stores
@@ -925,6 +1044,7 @@ mod tests {
         let setup_result = setup_context_store(
             Some("bad-meta"),
             None,
+            false,
             false,
             global_data_dir,
         ).expect("setup failed");
@@ -955,6 +1075,7 @@ mod tests {
         let result = setup_context_store(
             Some("INVALID"),
             None,
+            false,
             false,
             global_data_dir,
         );
@@ -990,5 +1111,134 @@ mod tests {
         ).expect("register failed");
 
         assert_eq!(result.store.id, "my-store");
+    }
+
+    #[test]
+    fn test_setup_refuses_nested_in_git_repo() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let git_dir = temp_dir.path().join("git-repo");
+        fs::create_dir(&git_dir).expect("create git dir");
+
+        // Initialize a git repository in git_dir
+        Command::new("git")
+            .args(&["init", "-q"])
+            .current_dir(&git_dir)
+            .output()
+            .expect("git init failed");
+
+        // Try to set up a store inside the git repo; should fail
+        let store_dir = git_dir.join("store");
+        let global_data_dir = Some(temp_dir.path());
+
+        let result = setup_context_store(
+            Some("nested-store"),
+            Some(store_dir.to_str().unwrap()),
+            false,
+            false,
+            global_data_dir,
+        );
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("inside another Git repository"));
+    }
+
+    #[test]
+    fn test_setup_allows_nested_with_flag() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let git_dir = temp_dir.path().join("git-repo");
+        fs::create_dir(&git_dir).expect("create git dir");
+
+        // Initialize a git repository
+        Command::new("git")
+            .args(&["init", "-q"])
+            .current_dir(&git_dir)
+            .output()
+            .expect("git init failed");
+
+        // Now set up a store inside the git repo WITH the flag; should succeed
+        let store_dir = git_dir.join("store");
+        let global_data_dir = Some(temp_dir.path());
+
+        let result = setup_context_store(
+            Some("nested-store"),
+            Some(store_dir.to_str().unwrap()),
+            false,
+            true, // allow_inside_git_repository
+            global_data_dir,
+        );
+
+        assert!(result.is_ok());
+        let store_result = result.unwrap();
+        assert_eq!(store_result.store.id, "nested-store");
+    }
+
+    #[test]
+    fn test_setup_succeeds_outside_git_repo() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let store_dir = temp_dir.path().join("store");
+        let global_data_dir = Some(temp_dir.path());
+
+        // Store is not in a git repo; should succeed
+        let result = setup_context_store(
+            Some("free-store"),
+            Some(store_dir.to_str().unwrap()),
+            false,
+            false,
+            global_data_dir,
+        );
+
+        assert!(result.is_ok());
+        let store_result = result.unwrap();
+        assert_eq!(store_result.store.id, "free-store");
+    }
+
+    #[test]
+    fn test_setup_with_init_git_at_root() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let global_data_dir = Some(temp_dir.path());
+
+        // Set up a store with init_git; the repo is AT the store root, not a containing repo.
+        // This should succeed because we're checking for a containing git repo, not one at the root itself.
+        let result = setup_context_store(
+            Some("repo-store"),
+            None,
+            true, // init_git
+            false, // allow_inside_git_repository
+            global_data_dir,
+        );
+
+        assert!(result.is_ok());
+        let store_result = result.unwrap();
+        assert_eq!(store_result.store.id, "repo-store");
+        // The init_git should have created a repo at the store root
+        assert!(store_result.git.initialized || store_result.git.is_repository);
+    }
+
+    #[test]
+    fn test_find_containing_git_repository() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let git_dir = temp_dir.path().join("git-repo");
+        fs::create_dir(&git_dir).expect("create git dir");
+
+        // Initialize git repo
+        Command::new("git")
+            .args(&["init", "-q"])
+            .current_dir(&git_dir)
+            .output()
+            .expect("git init failed");
+
+        // Test: path inside git repo should find it
+        // We need to create the actual path so that we can check
+        let store_path = git_dir.join("sub").join("store");
+        fs::create_dir_all(&store_path).expect("create store path");
+        let found = find_containing_git_repository_root(&store_path);
+        assert!(found.is_some());
+
+        // Test: path not in git repo should return None
+        let free_path = temp_dir.path().join("free").join("store");
+        // Don't create this path; test that a non-existent path not in any git repo returns None
+        let found = find_containing_git_repository_root(&free_path);
+        assert!(found.is_none());
     }
 }

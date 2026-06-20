@@ -59,9 +59,9 @@ The `vendor/OpenSpec/` submodule contains the upstream TypeScript implementation
 | AI Tool Integration | Complete | `src/ai_tools/` | incl. Bob/ForgeCode/Junie/Kimi/Lingma/Vibe + Copilot detection paths |
 | Shell Completion | Complete | `src/cli/completion/` | bash/zsh/fish, opt-in install |
 | Telemetry | Complete | `src/telemetry/` | PostHog, opt-out, firewall-silent |
-| Context Store | Complete | `src/core/context_store/` | registry.yaml + store.yaml + CLI |
+| Context Store | Complete | `src/core/context_store/` | registry.yaml + store.yaml + CLI; git-nesting guard on `setup --path` |
 | Initiatives | Complete | `src/core/collections/initiatives/` | initiative.yaml + 5 md files + CLI |
-| Workspace (beta) | Complete | `src/core/workspace/` | view.yaml/registry, openers, skills, CLI; git-nesting guard on `setup --path` deferred |
+| Workspace (beta) | Complete | `src/core/workspace/` | view.yaml/registry, openers, skills, CLI |
 
 ### How to Sync After Upgrading vendor/OpenSpec/
 

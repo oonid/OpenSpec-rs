@@ -27,9 +27,7 @@ Sync with upstream OpenSpec `v1.2.0` → `v1.4.1`.
 ### Fixed
 - Telemetry fails silently in firewalled environments (1s timeout, no retries)
 - `--json` output no longer leaks spinner text to stderr
-
-### Known gaps
-- Workspace `setup --path <inside-a-git-repo>` does not yet implement the upstream git-nesting guard (default managed store root is unaffected)
+- `context-store setup --path <p>` refuses a path inside an existing Git repository (git-nesting guard), with a `--allow-inside-git-repository` escape hatch
 
 ## [0.1.4] - 2026-03-15
 

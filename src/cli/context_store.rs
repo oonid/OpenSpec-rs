@@ -9,9 +9,16 @@ pub fn run(cmd: ContextStoreCommands) -> Result<(), Box<dyn std::error::Error>> 
             id,
             path,
             init_git,
+            allow_inside_git_repository,
             json,
         } => {
-            run_setup(id.as_deref(), path.as_deref(), init_git, json)
+            run_setup(
+                id.as_deref(),
+                path.as_deref(),
+                init_git,
+                allow_inside_git_repository,
+                json,
+            )
         }
         ContextStoreCommands::Register { path, id, json } => {
             run_register(path.as_deref(), id.as_deref(), json)
@@ -35,9 +42,16 @@ fn run_setup(
     id: Option<&str>,
     path: Option<&str>,
     init_git: bool,
+    allow_inside_git_repository: bool,
     json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let result = context_store::setup_context_store(id, path, init_git, None)
+    let result = context_store::setup_context_store(
+        id,
+        path,
+        init_git,
+        allow_inside_git_repository,
+        None,
+    )
         .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)?;
 
     if json {
