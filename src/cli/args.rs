@@ -241,6 +241,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         unsafe { std::env::set_var("NO_COLOR", "1") };
     }
 
+    // One-time best-effort migration of legacy macOS global config to the upstream-aligned
+    // location (no-op on other platforms). Must run before telemetry reads the config.
+    crate::core::config::migrate_legacy_macos_global_config();
+
     // Telemetry: show first-run notice and track command
     crate::telemetry::maybe_show_telemetry_notice();
     let command_path = get_command_path(&cli);

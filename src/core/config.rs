@@ -8,24 +8,61 @@ pub const OPENSPEC_DIR_NAME: &str = "openspec";
 pub const CONFIG_FILE_NAME: &str = "config.yaml";
 pub const GLOBAL_CONFIG_FILE_NAME: &str = "config.json";
 
-pub fn xdg_config_dir() -> PathBuf {
-    if let Some(xdg_config) = std::env::var_os("XDG_CONFIG_HOME") {
-        PathBuf::from(xdg_config).join("openspec")
-    } else if let Some(config_dir) = dirs::config_dir() {
-        config_dir.join("openspec")
-    } else {
-        PathBuf::from(".config").join("openspec")
+fn home_dir() -> PathBuf {
+    dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Resolve a global config/data directory, mirroring upstream `getGlobalConfigDir`/
+/// `getGlobalDataDir` exactly so the Rust binary and the npm CLI share locations:
+/// the `*_HOME` env var wins on all platforms; otherwise Windows uses its env dir
+/// (with an `AppData/...` fallback) and macOS/Linux both use a dotfile path under `$HOME`.
+///
+/// NOTE: unlike the `dirs` crate, macOS uses `~/.config` and `~/.local/share` here (not
+/// `~/Library/Application Support`) — that is intentional, to match upstream.
+fn resolve_global_dir(
+    xdg_override: Option<&std::ffi::OsStr>,
+    win_override: Option<&std::ffi::OsStr>,
+    home: &Path,
+    is_windows: bool,
+    win_fallback: &[&str],
+    unix_fallback: &[&str],
+) -> PathBuf {
+    if let Some(x) = xdg_override {
+        return Path::new(x).join(OPENSPEC_DIR_NAME);
     }
+    if is_windows {
+        if let Some(w) = win_override {
+            return Path::new(w).join(OPENSPEC_DIR_NAME);
+        }
+        let mut p = home.to_path_buf();
+        p.extend(win_fallback);
+        return p.join(OPENSPEC_DIR_NAME);
+    }
+    let mut p = home.to_path_buf();
+    p.extend(unix_fallback);
+    p.join(OPENSPEC_DIR_NAME)
+}
+
+pub fn xdg_config_dir() -> PathBuf {
+    resolve_global_dir(
+        std::env::var_os("XDG_CONFIG_HOME").as_deref(),
+        std::env::var_os("APPDATA").as_deref(),
+        &home_dir(),
+        cfg!(target_os = "windows"),
+        &["AppData", "Roaming"],
+        &[".config"],
+    )
 }
 
 pub fn xdg_data_dir() -> PathBuf {
-    if let Some(xdg_data) = std::env::var_os("XDG_DATA_HOME") {
-        PathBuf::from(xdg_data).join("openspec")
-    } else if let Some(data_dir) = dirs::data_local_dir() {
-        data_dir.join("openspec")
-    } else {
-        PathBuf::from(".local").join("share").join("openspec")
-    }
+    resolve_global_dir(
+        std::env::var_os("XDG_DATA_HOME").as_deref(),
+        std::env::var_os("LOCALAPPDATA").as_deref(),
+        &home_dir(),
+        cfg!(target_os = "windows"),
+        &["AppData", "Local"],
+        &[".local", "share"],
+    )
 }
 
 pub fn xdg_config_path() -> PathBuf {
@@ -241,5 +278,85 @@ fn find_project_root() -> Option<PathBuf> {
 impl Default for ConfigManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Best-effort, one-time migration for macOS users whose global config lived under the old
+/// `~/Library/Application Support/openspec` location (the `dirs` crate default) before
+/// `xdg_config_dir`/`xdg_data_dir` were aligned with upstream's `~/.config`/`~/.local/share`.
+///
+/// Copies the legacy global config file to its new home if the new one does not exist yet, so
+/// macOS users keep their telemetry preference / anonymous id. No-op on other platforms and
+/// when `XDG_CONFIG_HOME` is set. Non-fatal: any error is ignored.
+pub fn migrate_legacy_macos_global_config() {
+    #[cfg(target_os = "macos")]
+    {
+        if std::env::var_os("XDG_CONFIG_HOME").is_some() {
+            return;
+        }
+        if let Some(legacy_base) = dirs::config_dir() {
+            let legacy_config = legacy_base.join(OPENSPEC_DIR_NAME).join(GLOBAL_CONFIG_FILE_NAME);
+            let new_config = xdg_config_path();
+            if legacy_config.exists() && !new_config.exists() {
+                if let Some(parent) = new_config.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::copy(&legacy_config, &new_config);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod dir_resolution_tests {
+    use super::*;
+    use std::ffi::OsStr;
+    use std::path::Path;
+
+    #[test]
+    fn xdg_override_wins_on_all_platforms() {
+        let home = Path::new("/home/u");
+        for is_windows in [true, false] {
+            let dir = resolve_global_dir(
+                Some(OsStr::new("/custom/xdg")),
+                Some(OsStr::new("/win/appdata")),
+                home,
+                is_windows,
+                &["AppData", "Roaming"],
+                &[".config"],
+            );
+            assert_eq!(dir, Path::new("/custom/xdg/openspec"));
+        }
+    }
+
+    #[test]
+    fn unix_and_macos_use_dotfile_path() {
+        // is_windows = false covers both Linux and macOS — matches upstream (no Library/... path).
+        let dir = resolve_global_dir(
+            None,
+            None,
+            Path::new("/Users/u"),
+            false,
+            &["AppData", "Local"],
+            &[".local", "share"],
+        );
+        assert_eq!(dir, Path::new("/Users/u/.local/share/openspec"));
+    }
+
+    #[test]
+    fn windows_uses_env_then_fallback() {
+        let home = Path::new("C:\\Users\\u");
+        let with_env = resolve_global_dir(
+            None,
+            Some(OsStr::new("D:\\AppData\\Local")),
+            home,
+            true,
+            &["AppData", "Local"],
+            &[".local", "share"],
+        );
+        assert_eq!(with_env, Path::new("D:\\AppData\\Local").join("openspec"));
+
+        let fallback = resolve_global_dir(None, None, home, true, &["AppData", "Local"], &[".local", "share"]);
+        assert_eq!(fallback, home.join("AppData").join("Local").join("openspec"));
     }
 }
