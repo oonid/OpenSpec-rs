@@ -4,6 +4,7 @@ pub mod openers;
 pub mod open_surface;
 pub mod registry;
 pub mod state_io;
+pub mod skills;
 
 // Re-export main public types and functions for convenience
 pub use foundation::{
@@ -52,4 +53,13 @@ pub use open_surface::{
     WorkspaceSkippedOpenLink, WorkspaceSkippedReason, WORKSPACE_GUIDANCE_BODY,
     WORKSPACE_GUIDANCE_END_MARKER, WORKSPACE_GUIDANCE_START_MARKER,
     WORKSPACE_OPEN_INITIATIVE_FOLDER_LABEL, WORKSPACE_OPEN_ROOT_FOLDER_LABEL,
+};
+
+pub use skills::{
+    create_workspace_skill_skipped_report, generate_workspace_agent_skills,
+    get_current_workspace_skill_profile_selection, get_workspace_skill_capable_tools,
+    get_workspace_skill_directory, get_workspace_skill_tool_ids,
+    has_workspace_skill_profile_drift, parse_workspace_skill_tools_value,
+    update_workspace_agent_skills, WorkspaceSkillAgentResult, WorkspaceSkillFailedResult,
+    WorkspaceSkillInstallationReport, WorkspaceSkillRemovedResult, WorkspaceSkillSkippedResult,
 };
