@@ -7,6 +7,9 @@ pub const WORKSPACE_METADATA_DIR_NAME: &str = ".openspec-workspace";
 pub const WORKSPACE_VIEW_STATE_FILE_NAME: &str = "view.yaml";
 pub const WORKSPACE_CHANGES_DIR_NAME: &str = "changes";
 pub const WORKSPACE_CODE_WORKSPACE_EXTENSION: &str = ".code-workspace";
+pub const WORKSPACE_SUPPORTED_OPENER_VALUES: &[&str] = &["codex-cli", "claude", "github-copilot", "editor"];
+pub const WORKSPACE_AGENT_OPENER_IDS: &[&str] = &["codex-cli", "claude", "github-copilot"];
+pub const WORKSPACE_EDITOR_OPENER_IDS: &[&str] = &["vscode"];
 
 // Validation helpers
 fn validate_folder_style_name(name: &str, label: &str) -> Result<(), String> {
@@ -179,6 +182,59 @@ pub fn serialize_workspace_view_state(state: &WorkspaceViewState) -> Result<Stri
     serde_yaml::to_string(state).map_err(|e| format!("Failed to serialize workspace view state: {}", e))
 }
 
+// Opener-related functions
+pub fn parse_workspace_preferred_opener_value(value: &str) -> Result<PreferredOpener, String> {
+    if value == "editor" {
+        return Ok(PreferredOpener {
+            kind: OpenerKind::Editor,
+            id: "vscode".into(),
+        });
+    }
+
+    // Check if it's one of the agent opener IDs
+    if WORKSPACE_AGENT_OPENER_IDS.contains(&value) {
+        return Ok(PreferredOpener {
+            kind: OpenerKind::Agent,
+            id: value.into(),
+        });
+    }
+
+    Err(format!(
+        "Unsupported workspace opener '{}'. Supported values: {}",
+        value,
+        WORKSPACE_SUPPORTED_OPENER_VALUES.join(", ")
+    ))
+}
+
+pub fn validate_workspace_preferred_opener(opener: &PreferredOpener) -> Result<(), String> {
+    match opener.kind {
+        OpenerKind::Editor => {
+            if opener.id == "vscode" {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Unsupported workspace opener '{}:{}'. Supported values: {}",
+                    "editor",
+                    opener.id,
+                    WORKSPACE_SUPPORTED_OPENER_VALUES.join(", ")
+                ))
+            }
+        }
+        OpenerKind::Agent => {
+            if WORKSPACE_AGENT_OPENER_IDS.contains(&opener.id.as_str()) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Unsupported workspace opener '{}:{}'. Supported values: {}",
+                    "agent",
+                    opener.id,
+                    WORKSPACE_SUPPORTED_OPENER_VALUES.join(", ")
+                ))
+            }
+        }
+    }
+}
+
 // Atomic write helper (matches context_store::write_file_atomically)
 pub fn write_file_atomically(path: &Path, content: &str) -> std::io::Result<()> {
     use std::fs::File;
@@ -330,5 +386,78 @@ mod tests {
         let result = parse_workspace_view_state(yaml);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid workspace link name"));
+    }
+
+    #[test]
+    fn test_parse_workspace_preferred_opener_value_editor() {
+        let result = parse_workspace_preferred_opener_value("editor").unwrap();
+        assert_eq!(result.kind, OpenerKind::Editor);
+        assert_eq!(result.id, "vscode");
+    }
+
+    #[test]
+    fn test_parse_workspace_preferred_opener_value_claude() {
+        let result = parse_workspace_preferred_opener_value("claude").unwrap();
+        assert_eq!(result.kind, OpenerKind::Agent);
+        assert_eq!(result.id, "claude");
+    }
+
+    #[test]
+    fn test_parse_workspace_preferred_opener_value_codex_cli() {
+        let result = parse_workspace_preferred_opener_value("codex-cli").unwrap();
+        assert_eq!(result.kind, OpenerKind::Agent);
+        assert_eq!(result.id, "codex-cli");
+    }
+
+    #[test]
+    fn test_parse_workspace_preferred_opener_value_github_copilot() {
+        let result = parse_workspace_preferred_opener_value("github-copilot").unwrap();
+        assert_eq!(result.kind, OpenerKind::Agent);
+        assert_eq!(result.id, "github-copilot");
+    }
+
+    #[test]
+    fn test_parse_workspace_preferred_opener_value_invalid() {
+        let result = parse_workspace_preferred_opener_value("bogus");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Unsupported workspace opener"));
+        assert!(err.contains("'bogus'"));
+    }
+
+    #[test]
+    fn test_validate_workspace_preferred_opener_editor_vscode() {
+        let opener = PreferredOpener {
+            kind: OpenerKind::Editor,
+            id: "vscode".into(),
+        };
+        assert!(validate_workspace_preferred_opener(&opener).is_ok());
+    }
+
+    #[test]
+    fn test_validate_workspace_preferred_opener_editor_invalid() {
+        let opener = PreferredOpener {
+            kind: OpenerKind::Editor,
+            id: "foo".into(),
+        };
+        assert!(validate_workspace_preferred_opener(&opener).is_err());
+    }
+
+    #[test]
+    fn test_validate_workspace_preferred_opener_agent_claude() {
+        let opener = PreferredOpener {
+            kind: OpenerKind::Agent,
+            id: "claude".into(),
+        };
+        assert!(validate_workspace_preferred_opener(&opener).is_ok());
+    }
+
+    #[test]
+    fn test_validate_workspace_preferred_opener_agent_invalid() {
+        let opener = PreferredOpener {
+            kind: OpenerKind::Agent,
+            id: "foo".into(),
+        };
+        assert!(validate_workspace_preferred_opener(&opener).is_err());
     }
 }

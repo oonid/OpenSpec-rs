@@ -1,5 +1,6 @@
 pub mod foundation;
 pub mod legacy_state;
+pub mod openers;
 pub mod registry;
 pub mod state_io;
 
@@ -8,10 +9,18 @@ pub use foundation::{
     get_workspace_changes_dir, get_workspace_metadata_dir, get_workspace_view_state_path,
     is_valid_workspace_link_name, is_valid_workspace_name, parse_workspace_view_state,
     serialize_workspace_view_state, validate_workspace_link_name, validate_workspace_name,
-    write_file_atomically, ContextStoreBinding, ContextStoreSelector, OpenerKind,
+    write_file_atomically, parse_workspace_preferred_opener_value, validate_workspace_preferred_opener,
+    ContextStoreBinding, ContextStoreSelector, OpenerKind,
     PreferredOpener, WorkspaceContext, WorkspaceInitiativeRef, WorkspaceSkillState,
     WorkspaceViewState, WORKSPACE_CHANGES_DIR_NAME, WORKSPACE_CODE_WORKSPACE_EXTENSION,
     WORKSPACE_METADATA_DIR_NAME, WORKSPACE_VIEW_STATE_FILE_NAME,
+    WORKSPACE_SUPPORTED_OPENER_VALUES, WORKSPACE_AGENT_OPENER_IDS, WORKSPACE_EDITOR_OPENER_IDS,
+};
+
+pub use openers::{
+    get_default_workspace_opener_choice_value, get_workspace_opener_executable,
+    get_workspace_opener_label, is_workspace_executable_available, list_workspace_opener_choices,
+    WorkspaceOpenerChoice,
 };
 
 pub use registry::{
