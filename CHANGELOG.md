@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-20
+
+Sync with upstream OpenSpec `v1.2.0` → `v1.4.1`.
+
+### Added
+- New AI tools: Bob Shell, ForgeCode, Junie, Kimi CLI, Lingma, Mistral Vibe
+- `detectionPaths`-based AI-tool auto-detection (fixes GitHub Copilot false positive from a bare `.github/`)
+- `sync` workflow included in the default `core` profile
+- **Context stores** — `openspec context-store <setup|register|unregister|remove|list|doctor>`, backed by a global `context-stores/registry.yaml` and per-store `.openspec-store/store.yaml`
+- **Initiatives** — `openspec initiative <create|show|list>` with `--store`/`--store-path`/`--json`, stored under `<store>/initiatives/<id>/`
+- **Workspaces (beta)** — `openspec workspace <setup|list|link|relink|doctor|update|open>`, with `.openspec-workspace/view.yaml` view state, a managed `workspaces/registry.yaml`, AGENTS.md guidance + `<name>.code-workspace` generation, and per-tool workspace skills
+
+### Changed
+- Spec parser: requirement headers parsed case-insensitively; requirements nested in fenced code blocks are detected
+- `validate`: hint when SHALL/MUST appears only in a requirement header
+- Shell completion install is opt-in
+- Global config/data dirs now match upstream on macOS (`~/.config`, `~/.local/share` instead of `~/Library/Application Support`), with a best-effort migration; the Rust binary and npm CLI now share locations
+- Top-level `openspec update` prints a hint in a workspace root but stays project-scoped; foreign root `workspace.yaml` files are ignored
+
+### Fixed
+- Telemetry fails silently in firewalled environments (1s timeout, no retries)
+- `--json` output no longer leaks spinner text to stderr
+
+### Known gaps
+- Workspace `setup --path <inside-a-git-repo>` does not yet implement the upstream git-nesting guard (default managed store root is unaffected)
+
 ## [0.1.4] - 2026-03-15
 
 ### Added
