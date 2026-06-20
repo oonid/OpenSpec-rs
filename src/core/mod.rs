@@ -1,4 +1,5 @@
 pub mod artifact;
+pub mod collections;
 pub mod config;
 pub mod context_store;
 pub mod error;
