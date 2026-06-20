@@ -1,5 +1,6 @@
 pub mod foundation;
 pub mod registry;
+pub mod operations;
 
 // Re-export main public types and functions for convenience
 pub use foundation::{
@@ -15,4 +16,11 @@ pub use foundation::{
 pub use registry::{
     assert_no_registered_store_conflict, get_store_root_for_backend, list_registry_entries,
     load_registry, save_registry,
+};
+
+pub use operations::{
+    setup_context_store, register_existing_context_store, unregister_context_store,
+    remove_context_store, list_context_stores, doctor_context_stores,
+    ContextStoreInfo, MutationResult, CleanupResult, ListResult, DoctorResult, StoreInspection,
+    GitStatus,
 };
