@@ -112,8 +112,7 @@ pub fn parse_registry_state(content: &str) -> Result<RegistryState, String> {
 
     // Validate all store IDs
     for id in parsed.stores.keys() {
-        validate_context_store_id(id)
-            .map_err(|e| format!("Invalid store id '{}': {}", id, e))?;
+        validate_context_store_id(id).map_err(|e| format!("Invalid store id '{}': {}", id, e))?;
     }
 
     Ok(parsed)
@@ -122,8 +121,7 @@ pub fn parse_registry_state(content: &str) -> Result<RegistryState, String> {
 pub fn serialize_registry_state(state: &RegistryState) -> Result<String, String> {
     // Validate all store IDs before serializing
     for id in state.stores.keys() {
-        validate_context_store_id(id)
-            .map_err(|e| format!("Invalid store id '{}': {}", id, e))?;
+        validate_context_store_id(id).map_err(|e| format!("Invalid store id '{}': {}", id, e))?;
     }
 
     serde_yaml::to_string(state).map_err(|e| format!("Failed to serialize registry state: {}", e))
@@ -214,10 +212,7 @@ mod tests {
             },
         );
 
-        let state = RegistryState {
-            version: 1,
-            stores,
-        };
+        let state = RegistryState { version: 1, stores };
 
         let serialized = serialize_registry_state(&state).expect("serialize failed");
         assert!(serialized.contains("type: git"));
@@ -243,10 +238,7 @@ mod tests {
             },
         );
 
-        let state = RegistryState {
-            version: 1,
-            stores,
-        };
+        let state = RegistryState { version: 1, stores };
 
         let serialized = serialize_registry_state(&state).expect("serialize failed");
         assert!(serialized.contains("type: git"));
@@ -277,14 +269,12 @@ mod tests {
         let target_path = temp_dir.path().join("test.txt");
 
         let content1 = "first content";
-        write_file_atomically(&target_path, content1)
-            .expect("first write failed");
+        write_file_atomically(&target_path, content1).expect("first write failed");
         let read_back = std::fs::read_to_string(&target_path).expect("read failed");
         assert_eq!(read_back, content1);
 
         let content2 = "second content";
-        write_file_atomically(&target_path, content2)
-            .expect("second write failed");
+        write_file_atomically(&target_path, content2).expect("second write failed");
         let read_back = std::fs::read_to_string(&target_path).expect("read failed");
         assert_eq!(read_back, content2);
     }

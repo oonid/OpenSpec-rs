@@ -1,7 +1,7 @@
 use crate::cli::args::InitiativeCommands;
 use crate::core::collections::initiatives::{
-    self, CreateInitiativeInput, InitiativeState, find_initiative_across_stores,
-    resolve_selected_store, registered_stores,
+    self, find_initiative_across_stores, registered_stores, resolve_selected_store,
+    CreateInitiativeInput, InitiativeState,
 };
 use serde::Serialize;
 
@@ -58,12 +58,10 @@ fn run_create(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Validate required fields
     let id = id.ok_or_else(|| "Pass an initiative id.".to_string())?;
-    let title = title.ok_or_else(|| {
-        "Initiative title is required. Pass --title <title>.".to_string()
-    })?;
-    let summary = summary.ok_or_else(|| {
-        "Initiative summary is required. Pass --summary <summary>.".to_string()
-    })?;
+    let title =
+        title.ok_or_else(|| "Initiative title is required. Pass --title <title>.".to_string())?;
+    let summary = summary
+        .ok_or_else(|| "Initiative summary is required. Pass --summary <summary>.".to_string())?;
 
     // Resolve the store
     let selected = resolve_selected_store(store, store_path, None)

@@ -52,7 +52,10 @@ pub fn resolve_selected_workspace(
                 };
                 Ok(SelectedWorkspace { name, root })
             }
-            None => Err("No workspace found. Run from inside a workspace or pass --workspace <name>.".to_string()),
+            None => Err(
+                "No workspace found. Run from inside a workspace or pass --workspace <name>."
+                    .to_string(),
+            ),
         }
     }
 }
@@ -82,19 +85,13 @@ pub fn resolve_existing_directory(input: &str, cwd: &Path) -> Result<PathBuf, St
     match std::fs::metadata(&abs_path) {
         Ok(metadata) => {
             if !metadata.is_dir() {
-                return Err(format!(
-                    "Path '{}' is not an existing folder.",
-                    input
-                ));
+                return Err(format!("Path '{}' is not an existing folder.", input));
             }
-            abs_path.canonicalize().map_err(|e| {
-                format!("Failed to canonicalize path '{}': {}", input, e)
-            })
+            abs_path
+                .canonicalize()
+                .map_err(|e| format!("Failed to canonicalize path '{}': {}", input, e))
         }
-        Err(_) => Err(format!(
-            "Path '{}' is not an existing folder.",
-            input
-        )),
+        Err(_) => Err(format!("Path '{}' is not an existing folder.", input)),
     }
 }
 
@@ -132,14 +129,13 @@ pub fn add_workspace_link(
 
     // Check for duplicate link
     if view_state.links.contains_key(&link_name) {
-        return Err(format!(
-            "Workspace link '{}' already exists.",
-            link_name
-        ));
+        return Err(format!("Workspace link '{}' already exists.", link_name));
     }
 
     // Insert the link
-    view_state.links.insert(link_name.clone(), Some(resolved_str.clone()));
+    view_state
+        .links
+        .insert(link_name.clone(), Some(resolved_str.clone()));
 
     // Write the updated state
     super::state_io::write_workspace_view_state(&selected.root, &view_state)?;
@@ -179,7 +175,9 @@ pub fn update_workspace_link(
     }
 
     // Update the link
-    view_state.links.insert(link_name.clone(), Some(resolved_str.clone()));
+    view_state
+        .links
+        .insert(link_name.clone(), Some(resolved_str.clone()));
 
     // Write the updated state
     super::state_io::write_workspace_view_state(&selected.root, &view_state)?;
@@ -226,7 +224,10 @@ pub struct WorkspaceSetupResult {
 
 /// Parse workspace link inputs, supporting both `<path>` and `<name>=<path>` forms.
 /// Returns a BTreeMap of link_name -> link_path. Validates for duplicates and empty paths.
-pub fn parse_setup_links(link_inputs: &[String], cwd: &Path) -> Result<BTreeMap<String, String>, String> {
+pub fn parse_setup_links(
+    link_inputs: &[String],
+    cwd: &Path,
+) -> Result<BTreeMap<String, String>, String> {
     let mut links = BTreeMap::new();
 
     for input in link_inputs {
@@ -287,9 +288,7 @@ pub fn create_managed_workspace(
 
     // Check if workspace already exists
     if workspace_root.exists() {
-        let root_str = workspace_root
-            .to_str()
-            .unwrap_or("<invalid path>");
+        let root_str = workspace_root.to_str().unwrap_or("<invalid path>");
         return Err(format!(
             "Workspace '{}' already exists at {}.",
             name, root_str
@@ -386,7 +385,8 @@ mod tests {
     #[test]
     fn test_resolve_existing_directory_nonexistent() {
         let tmpdir = TempDir::new().expect("failed to create tempdir");
-        let result = resolve_existing_directory("/nonexistent/path/that/does/not/exist", tmpdir.path());
+        let result =
+            resolve_existing_directory("/nonexistent/path/that/does/not/exist", tmpdir.path());
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("not an existing folder"));
     }
@@ -535,10 +535,7 @@ links: {}
         std::fs::create_dir(&link_dir).expect("failed to create link dir");
 
         let mut links = BTreeMap::new();
-        links.insert(
-            "repo".to_string(),
-            link_dir.to_str().unwrap().to_string(),
-        );
+        links.insert("repo".to_string(), link_dir.to_str().unwrap().to_string());
 
         let result = create_managed_workspace("test-ws", links, None, None, Some(gdd));
 

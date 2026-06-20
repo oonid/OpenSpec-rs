@@ -221,11 +221,20 @@ pub enum ContextStoreCommands {
     Setup {
         #[arg(help = "Context store id")]
         id: Option<String>,
-        #[arg(long, help = "Context store folder path; defaults to OpenSpec managed local data")]
+        #[arg(
+            long,
+            help = "Context store folder path; defaults to OpenSpec managed local data"
+        )]
         path: Option<String>,
-        #[arg(long = "init-git", help = "Initialize a Git repository in the context store")]
+        #[arg(
+            long = "init-git",
+            help = "Initialize a Git repository in the context store"
+        )]
         init_git: bool,
-        #[arg(long = "allow-inside-git-repository", help = "Allow the context store path to be inside an existing Git repository")]
+        #[arg(
+            long = "allow-inside-git-repository",
+            help = "Allow the context store path to be inside an existing Git repository"
+        )]
         allow_inside_git_repository: bool,
         #[arg(long, help = "Output as JSON")]
         json: bool,
@@ -297,7 +306,10 @@ pub enum InitiativeCommands {
         #[arg(long)]
         json: bool,
     },
-    #[command(visible_alias = "ls", about = "List initiatives across registered context stores")]
+    #[command(
+        visible_alias = "ls",
+        about = "List initiatives across registered context stores"
+    )]
     List {
         #[arg(long)]
         store: Option<String>,
@@ -348,7 +360,10 @@ pub enum WorkspaceCommands {
     Setup {
         #[arg(long)]
         name: Option<String>,
-        #[arg(long = "link", help = "Repo/folder link: <path> or <name>=<path> (repeatable)")]
+        #[arg(
+            long = "link",
+            help = "Repo/folder link: <path> or <name>=<path> (repeatable)"
+        )]
         links: Vec<String>,
         #[arg(long)]
         opener: Option<String>,

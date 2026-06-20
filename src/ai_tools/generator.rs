@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone)]
 pub struct AITool {
     pub name: &'static str,
@@ -104,7 +103,15 @@ pub const AI_TOOLS: &[AITool] = &[
         name: "GitHub Copilot",
         value: "github-copilot",
         skills_dir: ".github",
-        detection_paths: &[".github/copilot-instructions.md", ".github/instructions", ".github/workflows/copilot-setup-steps.yml", ".github/prompts", ".github/agents", ".github/skills", ".github/.mcp.json"],
+        detection_paths: &[
+            ".github/copilot-instructions.md",
+            ".github/instructions",
+            ".github/workflows/copilot-setup-steps.yml",
+            ".github/prompts",
+            ".github/agents",
+            ".github/skills",
+            ".github/.mcp.json",
+        ],
     },
     AITool {
         name: "iFlow",

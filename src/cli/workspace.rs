@@ -2,9 +2,10 @@ use crate::cli::args::WorkspaceCommands;
 use crate::core::workspace::{
     add_workspace_link, get_workspace_opener_executable, get_workspace_opener_label,
     has_workspace_skill_profile_drift, is_workspace_executable_available, is_workspace_root,
-    list_workspace_registry_entries, load_workspace_registry, parse_workspace_preferred_opener_value,
-    read_workspace_view_state, resolve_selected_workspace, sync_workspace_open_surface,
-    update_workspace_link, OpenerKind, PreferredOpener, WorkspaceStatus,
+    list_workspace_registry_entries, load_workspace_registry,
+    parse_workspace_preferred_opener_value, read_workspace_view_state, resolve_selected_workspace,
+    sync_workspace_open_surface, update_workspace_link, OpenerKind, PreferredOpener,
+    WorkspaceStatus,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -80,7 +81,12 @@ pub fn run(cmd: WorkspaceCommands) -> Result<(), Box<dyn std::error::Error>> {
             path,
             workspace,
             json,
-        } => run_link(name_or_path.as_deref(), path.as_deref(), workspace.as_deref(), json),
+        } => run_link(
+            name_or_path.as_deref(),
+            path.as_deref(),
+            workspace.as_deref(),
+            json,
+        ),
         WorkspaceCommands::Relink {
             name,
             path,
@@ -112,7 +118,6 @@ pub fn run(cmd: WorkspaceCommands) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_list(json: bool) -> Result<(), Box<dyn std::error::Error>> {
-
     let registry = load_workspace_registry(None)
         .map_err(|e| format!("Failed to load workspace registry: {}", e))?;
 
@@ -228,14 +233,14 @@ fn run_link(
 
     // Validate that we have at least one argument
     let name_or_path_val = name_or_path.ok_or_else(|| {
-        Box::new(std::io::Error::other("Missing required argument: link name or path"))
-            as Box<dyn std::error::Error>
+        Box::new(std::io::Error::other(
+            "Missing required argument: link name or path",
+        )) as Box<dyn std::error::Error>
     })?;
 
     // Add the link
-    let (link_name, resolved_path) =
-        add_workspace_link(&selected, name_or_path_val, path, &cwd)
-            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)?;
+    let (link_name, resolved_path) = add_workspace_link(&selected, name_or_path_val, path, &cwd)
+        .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)?;
 
     if json {
         let output = WorkspaceMutationOutput {
@@ -429,7 +434,7 @@ fn run_setup(
     // Validate at least one link was provided
     if links_input.is_empty() {
         return Err(Box::new(std::io::Error::other(
-            "workspace setup requires --name <name> and at least one --link <path>."
+            "workspace setup requires --name <name> and at least one --link <path>.",
         )));
     }
 
@@ -481,7 +486,11 @@ fn run_setup(
 
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("Workspace '{}' created at {}", result.name, result.root.display());
+        println!(
+            "Workspace '{}' created at {}",
+            result.name,
+            result.root.display()
+        );
     }
 
     Ok(())
@@ -582,7 +591,9 @@ fn run_open(
         let parsed = parse_workspace_preferred_opener_value(agent_id)
             .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)?;
         if parsed.kind != OpenerKind::Agent {
-            return Err(format!("'{agent_id}' is not an agent opener. Use --editor for VS Code.").into());
+            return Err(
+                format!("'{agent_id}' is not an agent opener. Use --editor for VS Code.").into(),
+            );
         }
         parsed
     } else if let Some(stored) = view_state.preferred_opener.clone() {
@@ -598,10 +609,9 @@ fn run_open(
     let label = get_workspace_opener_label(&opener);
 
     if !is_workspace_executable_available(&executable) {
-        return Err(format!(
-            "Opener '{label}' is not available ({executable} not found on PATH)."
-        )
-        .into());
+        return Err(
+            format!("Opener '{label}' is not available ({executable} not found on PATH).").into(),
+        );
     }
 
     let workspace_root_str = selected.root.to_string_lossy().to_string();
@@ -691,7 +701,8 @@ links: {}
             .expect("failed to save registry");
 
         // Now resolve the workspace
-        let result = resolve_selected_workspace(Some("test-ws"), tmpdir.path(), Some(tmpdir.path()));
+        let result =
+            resolve_selected_workspace(Some("test-ws"), tmpdir.path(), Some(tmpdir.path()));
         assert!(result.is_ok());
         let selected = result.unwrap();
         assert_eq!(selected.name, "test-ws");

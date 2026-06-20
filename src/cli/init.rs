@@ -25,7 +25,6 @@ pub fn validate_write_permissions(path: &Path) -> Result<()> {
     Ok(())
 }
 
-
 pub fn resolve_tool_selection(
     tools_arg: &Option<String>,
     project_path: &Path,

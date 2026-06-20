@@ -86,11 +86,11 @@ pub fn is_valid_initiative_id(id: &str) -> bool {
 /// Parse a YAML string into an InitiativeState.
 /// Validates the state according to upstream rules.
 pub fn parse_initiative_state(content: &str) -> Result<InitiativeState, String> {
-    let raw: serde_yaml::Value = serde_yaml::from_str(content)
-        .map_err(|e| format!("Invalid initiative state: {}", e))?;
+    let raw: serde_yaml::Value =
+        serde_yaml::from_str(content).map_err(|e| format!("Invalid initiative state: {}", e))?;
 
-    let parsed: InitiativeState = serde_yaml::from_value(raw)
-        .map_err(|e| format!("Invalid initiative state: {}", e))?;
+    let parsed: InitiativeState =
+        serde_yaml::from_value(raw).map_err(|e| format!("Invalid initiative state: {}", e))?;
 
     // Validate version
     if parsed.version != 1 {
@@ -101,8 +101,7 @@ pub fn parse_initiative_state(content: &str) -> Result<InitiativeState, String> 
     }
 
     // Validate id
-    validate_initiative_id(&parsed.id)
-        .map_err(|e| format!("id: {}", e))?;
+    validate_initiative_id(&parsed.id).map_err(|e| format!("id: {}", e))?;
 
     // Validate title (non-blank after trim)
     if parsed.title.trim().is_empty() {
@@ -134,8 +133,7 @@ pub fn parse_initiative_state(content: &str) -> Result<InitiativeState, String> 
 /// Normalizes the state by round-tripping through parse to ensure validation.
 pub fn serialize_initiative_state(state: &InitiativeState) -> Result<String, String> {
     // Validate id first
-    validate_initiative_id(&state.id)
-        .map_err(|e| format!("id: {}", e))?;
+    validate_initiative_id(&state.id).map_err(|e| format!("id: {}", e))?;
 
     // Normalize by serializing then parsing to ensure all validation runs
     let normalized = InitiativeState {

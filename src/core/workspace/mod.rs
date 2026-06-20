@@ -1,24 +1,24 @@
 pub mod commands_support;
 pub mod foundation;
 pub mod legacy_state;
-pub mod openers;
 pub mod open_surface;
+pub mod openers;
 pub mod registry;
-pub mod state_io;
 pub mod skills;
+pub mod state_io;
 
 // Re-export main public types and functions for convenience
 pub use foundation::{
-    get_workspace_changes_dir, get_workspace_code_workspace_file_name, get_workspace_code_workspace_path,
-    get_workspace_context_initiative_id, get_workspace_metadata_dir, get_workspace_view_state_path,
-    is_valid_workspace_link_name, is_valid_workspace_name, parse_workspace_view_state,
+    get_workspace_changes_dir, get_workspace_code_workspace_file_name,
+    get_workspace_code_workspace_path, get_workspace_context_initiative_id,
+    get_workspace_metadata_dir, get_workspace_view_state_path, is_valid_workspace_link_name,
+    is_valid_workspace_name, parse_workspace_preferred_opener_value, parse_workspace_view_state,
     serialize_workspace_view_state, validate_workspace_link_name, validate_workspace_name,
-    write_file_atomically, parse_workspace_preferred_opener_value, validate_workspace_preferred_opener,
-    ContextStoreBinding, ContextStoreSelector, OpenerKind,
-    PreferredOpener, WorkspaceContext, WorkspaceInitiativeRef, WorkspaceSkillState,
-    WorkspaceViewState, WORKSPACE_CHANGES_DIR_NAME, WORKSPACE_CODE_WORKSPACE_EXTENSION,
-    WORKSPACE_METADATA_DIR_NAME, WORKSPACE_VIEW_STATE_FILE_NAME,
-    WORKSPACE_SUPPORTED_OPENER_VALUES, WORKSPACE_AGENT_OPENER_IDS, WORKSPACE_EDITOR_OPENER_IDS,
+    validate_workspace_preferred_opener, write_file_atomically, ContextStoreBinding,
+    ContextStoreSelector, OpenerKind, PreferredOpener, WorkspaceContext, WorkspaceInitiativeRef,
+    WorkspaceSkillState, WorkspaceViewState, WORKSPACE_AGENT_OPENER_IDS,
+    WORKSPACE_CHANGES_DIR_NAME, WORKSPACE_CODE_WORKSPACE_EXTENSION, WORKSPACE_EDITOR_OPENER_IDS,
+    WORKSPACE_METADATA_DIR_NAME, WORKSPACE_SUPPORTED_OPENER_VALUES, WORKSPACE_VIEW_STATE_FILE_NAME,
 };
 
 pub use openers::{
@@ -28,10 +28,10 @@ pub use openers::{
 };
 
 pub use registry::{
-    get_managed_workspaces_dir, get_workspace_registry_path, load_workspace_registry,
-    list_workspace_registry_entries, parse_workspace_registry_state,
-    save_workspace_registry, serialize_workspace_registry_state, WorkspaceRegistryEntry,
-    WorkspaceRegistryState, MANAGED_WORKSPACES_DIR_NAME, WORKSPACE_REGISTRY_FILE_NAME,
+    get_managed_workspaces_dir, get_workspace_registry_path, list_workspace_registry_entries,
+    load_workspace_registry, parse_workspace_registry_state, save_workspace_registry,
+    serialize_workspace_registry_state, WorkspaceRegistryEntry, WorkspaceRegistryState,
+    MANAGED_WORKSPACES_DIR_NAME, WORKSPACE_REGISTRY_FILE_NAME,
 };
 
 pub use legacy_state::{
@@ -59,10 +59,10 @@ pub use open_surface::{
 pub use skills::{
     create_workspace_skill_skipped_report, generate_workspace_agent_skills,
     get_current_workspace_skill_profile_selection, get_workspace_skill_capable_tools,
-    get_workspace_skill_directory, get_workspace_skill_tool_ids,
-    has_workspace_skill_profile_drift, parse_workspace_skill_tools_value,
-    update_workspace_agent_skills, WorkspaceSkillAgentResult, WorkspaceSkillFailedResult,
-    WorkspaceSkillInstallationReport, WorkspaceSkillRemovedResult, WorkspaceSkillSkippedResult,
+    get_workspace_skill_directory, get_workspace_skill_tool_ids, has_workspace_skill_profile_drift,
+    parse_workspace_skill_tools_value, update_workspace_agent_skills, WorkspaceSkillAgentResult,
+    WorkspaceSkillFailedResult, WorkspaceSkillInstallationReport, WorkspaceSkillRemovedResult,
+    WorkspaceSkillSkippedResult,
 };
 
 pub use commands_support::{

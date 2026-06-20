@@ -50,7 +50,9 @@ pub fn parse_workspace_registry_state(content: &str) -> Result<WorkspaceRegistry
     Ok(parsed)
 }
 
-pub fn serialize_workspace_registry_state(state: &WorkspaceRegistryState) -> Result<String, String> {
+pub fn serialize_workspace_registry_state(
+    state: &WorkspaceRegistryState,
+) -> Result<String, String> {
     // Validate all workspace names
     for name in state.workspaces.keys() {
         validate_workspace_name(name)
@@ -77,7 +79,9 @@ pub fn list_workspace_registry_entries(
     entries
 }
 
-pub fn load_workspace_registry(global_data_dir: Option<&Path>) -> Result<WorkspaceRegistryState, String> {
+pub fn load_workspace_registry(
+    global_data_dir: Option<&Path>,
+) -> Result<WorkspaceRegistryState, String> {
     let registry_path = get_workspace_registry_path(global_data_dir);
 
     match std::fs::read_to_string(&registry_path) {
@@ -193,6 +197,8 @@ mod tests {
 
         let result = serialize_workspace_registry_state(&state);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid workspace registry name"));
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid workspace registry name"));
     }
 }

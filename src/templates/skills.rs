@@ -217,10 +217,7 @@ mod tests {
 
     #[test]
     fn test_transform_to_hyphen_commands() {
-        assert_eq!(
-            transform_to_hyphen_commands("/opsx:new"),
-            "/opsx-new"
-        );
+        assert_eq!(transform_to_hyphen_commands("/opsx:new"), "/opsx-new");
         assert_eq!(
             transform_to_hyphen_commands("Use /opsx:apply to implement"),
             "Use /opsx-apply to implement"
@@ -233,8 +230,8 @@ mod tests {
 
     #[test]
     fn test_extract_generated_by_version() {
-        use tempfile::NamedTempFile;
         use std::io::Write;
+        use tempfile::NamedTempFile;
 
         let mut file = NamedTempFile::new().unwrap();
         writeln!(
@@ -257,8 +254,8 @@ content"#
 
     #[test]
     fn test_extract_generated_by_version_not_found() {
-        use tempfile::NamedTempFile;
         use std::io::Write;
+        use tempfile::NamedTempFile;
 
         let mut file = NamedTempFile::new().unwrap();
         writeln!(

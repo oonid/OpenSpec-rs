@@ -464,7 +464,10 @@ fn validate_change(change_dir: &std::path::Path, _strict: bool) -> Result<Valida
                         issues.push(ValidationIssue {
                             level: "ERROR".to_string(),
                             path: entry_path.clone(),
-                            message: format!("MODIFIED \"{}\" must contain SHALL or MUST", req.name),
+                            message: format!(
+                                "MODIFIED \"{}\" must contain SHALL or MUST",
+                                req.name
+                            ),
                         });
                     }
                 }

@@ -4,9 +4,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use super::foundation::{
-    validate_workspace_link_name, validate_workspace_name,
-    PreferredOpener, WorkspaceContext, WorkspaceSkillState,
-    WorkspaceViewState, WORKSPACE_METADATA_DIR_NAME,
+    validate_workspace_link_name, validate_workspace_name, PreferredOpener, WorkspaceContext,
+    WorkspaceSkillState, WorkspaceViewState, WORKSPACE_METADATA_DIR_NAME,
 };
 
 // Constants
@@ -77,13 +76,10 @@ pub fn parse_workspace_shared_state(content: &str) -> Result<WorkspaceSharedStat
         .ok_or("Missing or invalid name in workspace shared state")?
         .to_string();
 
-    validate_workspace_name(&name)
-        .map_err(|e| format!("Invalid workspace name: {}", e))?;
+    validate_workspace_name(&name).map_err(|e| format!("Invalid workspace name: {}", e))?;
 
     let context_key = Value::String("context".to_string());
-    let context = as_map
-        .get(&context_key)
-        .cloned();
+    let context = as_map.get(&context_key).cloned();
 
     let context_parsed = if let Some(ctx) = context {
         if ctx.is_null() {
@@ -106,10 +102,7 @@ pub fn parse_workspace_shared_state(content: &str) -> Result<WorkspaceSharedStat
 
     let mut links = BTreeMap::new();
     for (k, v) in links_raw.iter() {
-        let key = k
-            .as_str()
-            .ok_or("Link name must be a string")?
-            .to_string();
+        let key = k.as_str().ok_or("Link name must be a string")?.to_string();
 
         validate_workspace_link_name(&key)
             .map_err(|e| format!("Invalid workspace link name '{}': {}", key, e))?;
@@ -154,10 +147,7 @@ pub fn parse_workspace_local_state(content: &str) -> Result<WorkspaceLocalState,
 
     let mut paths = BTreeMap::new();
     for (k, v) in paths_raw.iter() {
-        let key = k
-            .as_str()
-            .ok_or("Path name must be a string")?
-            .to_string();
+        let key = k.as_str().ok_or("Path name must be a string")?.to_string();
 
         validate_workspace_link_name(&key)
             .map_err(|e| format!("Invalid workspace local path name '{}': {}", key, e))?;
@@ -171,9 +161,7 @@ pub fn parse_workspace_local_state(content: &str) -> Result<WorkspaceLocalState,
     }
 
     let preferred_opener_key = Value::String("preferred_opener".to_string());
-    let preferred_opener = as_map
-        .get(&preferred_opener_key)
-        .cloned();
+    let preferred_opener = as_map.get(&preferred_opener_key).cloned();
 
     let preferred_opener_parsed = if let Some(po) = preferred_opener {
         if po.is_null() {
@@ -189,28 +177,22 @@ pub fn parse_workspace_local_state(content: &str) -> Result<WorkspaceLocalState,
     };
 
     let tools_key = Value::String("tools".to_string());
-    let tools = as_map
-        .get(&tools_key)
-        .cloned()
-        .and_then(|v| {
-            if v.is_null() {
-                None
-            } else {
-                serde_yaml::from_value::<Vec<String>>(v).ok()
-            }
-        });
+    let tools = as_map.get(&tools_key).cloned().and_then(|v| {
+        if v.is_null() {
+            None
+        } else {
+            serde_yaml::from_value::<Vec<String>>(v).ok()
+        }
+    });
 
     let workspace_skills_key = Value::String("workspace_skills".to_string());
-    let workspace_skills = as_map
-        .get(&workspace_skills_key)
-        .cloned()
-        .and_then(|v| {
-            if v.is_null() {
-                None
-            } else {
-                serde_yaml::from_value::<WorkspaceSkillState>(v).ok()
-            }
-        });
+    let workspace_skills = as_map.get(&workspace_skills_key).cloned().and_then(|v| {
+        if v.is_null() {
+            None
+        } else {
+            serde_yaml::from_value::<WorkspaceSkillState>(v).ok()
+        }
+    });
 
     Ok(WorkspaceLocalState {
         version: 1,
@@ -252,7 +234,9 @@ pub fn workspace_state_parts_to_view_state(
         name: shared_state.name,
         context: shared_state.context,
         links,
-        preferred_opener: local_state.as_ref().and_then(|l| l.preferred_opener.clone()),
+        preferred_opener: local_state
+            .as_ref()
+            .and_then(|l| l.preferred_opener.clone()),
         tools: local_state.as_ref().and_then(|l| l.tools.clone()),
         workspace_skills: local_state
             .as_ref()
@@ -306,14 +290,16 @@ paths:
   repo: /absolute/path/to/repo
 "#;
 
-        let shared =
-            parse_workspace_shared_state(shared_yaml).expect("parse shared failed");
+        let shared = parse_workspace_shared_state(shared_yaml).expect("parse shared failed");
         let local = parse_workspace_local_state(local_yaml).expect("parse local failed");
 
         let view = workspace_state_parts_to_view_state(shared, Some(local));
         assert_eq!(view.name, "test-ws");
         assert_eq!(view.links.len(), 2);
-        assert_eq!(view.links.get("repo"), Some(&Some("/absolute/path/to/repo".to_string())));
+        assert_eq!(
+            view.links.get("repo"),
+            Some(&Some("/absolute/path/to/repo".to_string()))
+        );
         assert_eq!(view.links.get("docs"), Some(&None));
     }
 

@@ -443,7 +443,8 @@ fn parse_renamed_pairs(section_body: &str) -> Vec<RenamePair> {
     let mut pairs: Vec<RenamePair> = Vec::new();
     let from_re =
         regex::Regex::new(r"(?i)^\s*-?\s*FROM:\s*`?###\s*Requirement:\s*(.+?)`?\s*$").unwrap();
-    let to_re = regex::Regex::new(r"(?i)^\s*-?\s*TO:\s*`?###\s*Requirement:\s*(.+?)`?\s*$").unwrap();
+    let to_re =
+        regex::Regex::new(r"(?i)^\s*-?\s*TO:\s*`?###\s*Requirement:\s*(.+?)`?\s*$").unwrap();
 
     let mut current: Option<(Option<String>, Option<String>)> = None;
 

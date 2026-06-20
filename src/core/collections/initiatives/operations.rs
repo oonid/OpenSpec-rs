@@ -1,12 +1,12 @@
 use chrono::Utc;
+use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::collections::BTreeMap;
 
 use super::schema::{
-    InitiativeState, InitiativeStatus, INITIATIVE_FILE_NAME,
-    parse_initiative_state, serialize_initiative_state, validate_initiative_id,
+    parse_initiative_state, serialize_initiative_state, validate_initiative_id, InitiativeState,
+    InitiativeStatus, INITIATIVE_FILE_NAME,
 };
 use super::templates::build_default_initiative_files;
 
@@ -48,7 +48,9 @@ pub fn create_initiative(
         title: input.title.clone(),
         summary: input.summary.clone(),
         status: input.status.unwrap_or(InitiativeStatus::Exploring),
-        created: input.created.unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string()),
+        created: input
+            .created
+            .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string()),
         owners: input.owners.clone(),
         metadata: input.metadata.clone(),
     };
@@ -111,12 +113,7 @@ pub fn read_initiative(store_root: &Path, id: &str) -> Result<Option<InitiativeS
     let content = match fs::read_to_string(&yaml_path) {
         Ok(c) => c,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => {
-            return Err(format!(
-                "Failed to read initiative '{}': {}",
-                id, e
-            ))
-        }
+        Err(e) => return Err(format!("Failed to read initiative '{}': {}", id, e)),
     };
 
     // Parse and validate
@@ -142,12 +139,7 @@ pub fn list_initiatives(store_root: &Path) -> Result<Vec<InitiativeState>, Strin
     let entries = match fs::read_dir(&initiatives_root) {
         Ok(e) => e,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(vec![]),
-        Err(e) => {
-            return Err(format!(
-                "Failed to list initiatives directory: {}",
-                e
-            ))
-        }
+        Err(e) => return Err(format!("Failed to list initiatives directory: {}", e)),
     };
 
     let mut initiatives = Vec::new();
@@ -274,9 +266,7 @@ mod tests {
         .unwrap();
 
         // Read it back
-        let read_state = read_initiative(store_root, "test-init")
-            .unwrap()
-            .unwrap();
+        let read_state = read_initiative(store_root, "test-init").unwrap().unwrap();
 
         assert_eq!(created_state, read_state);
     }

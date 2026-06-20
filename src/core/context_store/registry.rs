@@ -115,7 +115,11 @@ mod tests {
     use crate::core::context_store::foundation::RegistryEntryState;
     use std::collections::BTreeMap;
 
-    fn create_git_backend(local_path: &str, remote: Option<&str>, branch: Option<&str>) -> BackendConfig {
+    fn create_git_backend(
+        local_path: &str,
+        remote: Option<&str>,
+        branch: Option<&str>,
+    ) -> BackendConfig {
         BackendConfig::Git {
             local_path: local_path.to_string(),
             remote: remote.map(|s| s.to_string()),
@@ -148,10 +152,7 @@ mod tests {
             },
         );
 
-        let state = RegistryState {
-            version: 1,
-            stores,
-        };
+        let state = RegistryState { version: 1, stores };
 
         let entries = list_registry_entries(&state);
         assert_eq!(entries.len(), 2);
@@ -162,7 +163,8 @@ mod tests {
 
     #[test]
     fn test_get_store_root_for_backend() {
-        let backend = create_git_backend("/path/to/store", Some("https://example.com"), Some("main"));
+        let backend =
+            create_git_backend("/path/to/store", Some("https://example.com"), Some("main"));
         let root = get_store_root_for_backend(&backend);
         assert_eq!(root, "/path/to/store");
     }
@@ -176,10 +178,7 @@ mod tests {
                 backend: create_git_backend("/existing/path", None, None),
             },
         );
-        let state = RegistryState {
-            version: 1,
-            stores,
-        };
+        let state = RegistryState { version: 1, stores };
 
         // Re-registering same id with same path should be OK (idempotent)
         let result = assert_no_registered_store_conflict(&state, "my-store", "/existing/path");
@@ -195,10 +194,7 @@ mod tests {
                 backend: create_git_backend("/existing/path", None, None),
             },
         );
-        let state = RegistryState {
-            version: 1,
-            stores,
-        };
+        let state = RegistryState { version: 1, stores };
 
         // Same id with different path should error
         let result = assert_no_registered_store_conflict(&state, "my-store", "/different/path");
@@ -215,10 +211,7 @@ mod tests {
                 backend: create_git_backend("/shared/path", None, None),
             },
         );
-        let state = RegistryState {
-            version: 1,
-            stores,
-        };
+        let state = RegistryState { version: 1, stores };
 
         // Different id with same path should error
         let result = assert_no_registered_store_conflict(&state, "store-b", "/shared/path");
@@ -235,10 +228,7 @@ mod tests {
                 backend: create_git_backend("/path/a", None, None),
             },
         );
-        let state = RegistryState {
-            version: 1,
-            stores,
-        };
+        let state = RegistryState { version: 1, stores };
 
         // Different id with different path should be OK
         let result = assert_no_registered_store_conflict(&state, "store-b", "/path/b");
@@ -257,10 +247,7 @@ mod tests {
                 backend: create_git_backend("/tmp/test", Some("origin"), Some("main")),
             },
         );
-        let original = RegistryState {
-            version: 1,
-            stores,
-        };
+        let original = RegistryState { version: 1, stores };
 
         // Real round-trip through disk: save creates the registry under the isolated data dir,
         // load reads it back identically.

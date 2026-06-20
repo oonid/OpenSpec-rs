@@ -51,10 +51,7 @@ pub fn resolve_selected_store(
         for entry in entries {
             if entry.id == id {
                 let root = PathBuf::from(get_store_root_for_backend(&entry.backend));
-                return Ok(SelectedStore {
-                    id: entry.id,
-                    root,
-                });
+                return Ok(SelectedStore { id: entry.id, root });
             }
         }
         return Err(format!("Context store '{}' is not registered.", id));
@@ -119,7 +116,7 @@ mod tests {
         create_initiative, CreateInitiativeInput,
     };
     use crate::core::context_store::{
-        save_registry, RegistryEntryState, RegistryState, BackendConfig,
+        save_registry, BackendConfig, RegistryEntryState, RegistryState,
     };
     use std::collections::BTreeMap;
     use tempfile::tempdir;
@@ -159,10 +156,7 @@ mod tests {
                 },
             },
         );
-        let registry = RegistryState {
-            version: 1,
-            stores,
-        };
+        let registry = RegistryState { version: 1, stores };
         save_registry(&registry, gdd).unwrap();
 
         let result = resolve_selected_store(Some("team"), None, gdd);

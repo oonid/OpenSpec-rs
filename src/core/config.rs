@@ -295,7 +295,9 @@ pub fn migrate_legacy_macos_global_config() {
             return;
         }
         if let Some(legacy_base) = dirs::config_dir() {
-            let legacy_config = legacy_base.join(OPENSPEC_DIR_NAME).join(GLOBAL_CONFIG_FILE_NAME);
+            let legacy_config = legacy_base
+                .join(OPENSPEC_DIR_NAME)
+                .join(GLOBAL_CONFIG_FILE_NAME);
             let new_config = xdg_config_path();
             if legacy_config.exists() && !new_config.exists() {
                 if let Some(parent) = new_config.parent() {
@@ -356,7 +358,17 @@ mod dir_resolution_tests {
         );
         assert_eq!(with_env, Path::new("D:\\AppData\\Local").join("openspec"));
 
-        let fallback = resolve_global_dir(None, None, home, true, &["AppData", "Local"], &[".local", "share"]);
-        assert_eq!(fallback, home.join("AppData").join("Local").join("openspec"));
+        let fallback = resolve_global_dir(
+            None,
+            None,
+            home,
+            true,
+            &["AppData", "Local"],
+            &[".local", "share"],
+        );
+        assert_eq!(
+            fallback,
+            home.join("AppData").join("Local").join("openspec")
+        );
     }
 }

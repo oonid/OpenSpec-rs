@@ -95,9 +95,7 @@ pub fn get_current_workspace_skill_profile_selection() -> (String, String, Vec<S
     (ctx.profile, ctx.delivery, ctx.workflow_ids)
 }
 
-pub fn has_workspace_skill_profile_drift(
-    skill_state: Option<&WorkspaceSkillState>,
-) -> bool {
+pub fn has_workspace_skill_profile_drift(skill_state: Option<&WorkspaceSkillState>) -> bool {
     let Some(state) = skill_state else {
         return false;
     };
@@ -119,11 +117,17 @@ pub fn has_workspace_skill_profile_drift(
 }
 
 pub fn get_workspace_skill_capable_tools() -> Vec<&'static crate::ai_tools::generator::AITool> {
-    AI_TOOLS.iter().filter(|tool| !tool.skills_dir.is_empty()).collect()
+    AI_TOOLS
+        .iter()
+        .filter(|tool| !tool.skills_dir.is_empty())
+        .collect()
 }
 
 pub fn get_workspace_skill_tool_ids() -> Vec<String> {
-    get_tools_with_skills_dir().iter().map(|s| s.to_string()).collect()
+    get_tools_with_skills_dir()
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
 }
 
 pub fn parse_workspace_skill_tools_value(raw: &str) -> Result<Vec<String>, String> {
@@ -164,7 +168,8 @@ pub fn parse_workspace_skill_tools_value(raw: &str) -> Result<Vec<String>, Strin
 
     if normalized.iter().any(|t| t == "all" || t == "none") {
         return Err(
-            "Cannot combine reserved values \"all\" or \"none\" with specific agent IDs.".to_string(),
+            "Cannot combine reserved values \"all\" or \"none\" with specific agent IDs."
+                .to_string(),
         );
     }
 
@@ -249,9 +254,7 @@ pub fn get_workspace_skill_directory(
 ) -> Result<PathBuf, String> {
     let tool = get_tool_by_value(tool_id)
         .ok_or_else(|| format!("Unknown workspace skill agent '{}'", tool_id))?;
-    Ok(workspace_root
-        .join(tool.skills_dir)
-        .join("skills"))
+    Ok(workspace_root.join(tool.skills_dir).join("skills"))
 }
 
 fn make_agent_result(
@@ -736,8 +739,8 @@ content"#
     #[test]
     fn test_generate_workspace_agent_skills_empty_selection() {
         let temp_dir = TempDir::new().unwrap();
-        let result = generate_workspace_agent_skills(temp_dir.path(), vec![])
-            .expect("should succeed");
+        let result =
+            generate_workspace_agent_skills(temp_dir.path(), vec![]).expect("should succeed");
 
         assert!(result.generated.is_empty());
         assert!(result.added.is_empty());
@@ -780,10 +783,7 @@ content"#
     #[test]
     fn test_generate_workspace_agent_skills_with_claude() {
         let temp_dir = TempDir::new().unwrap();
-        let result = generate_workspace_agent_skills(
-            temp_dir.path(),
-            vec!["claude".to_string()],
-        );
+        let result = generate_workspace_agent_skills(temp_dir.path(), vec!["claude".to_string()]);
 
         assert!(result.is_ok());
         let report = result.unwrap();
@@ -801,10 +801,7 @@ content"#
     #[test]
     fn test_generate_creates_skill_files() {
         let temp_dir = TempDir::new().unwrap();
-        let _ = generate_workspace_agent_skills(
-            temp_dir.path(),
-            vec!["claude".to_string()],
-        );
+        let _ = generate_workspace_agent_skills(temp_dir.path(), vec!["claude".to_string()]);
 
         let skills_dir = temp_dir.path().join(".claude/skills");
         assert!(skills_dir.exists());
@@ -812,12 +809,9 @@ content"#
         // Check that at least one skill file was created
         let has_skill_files = fs::read_dir(&skills_dir)
             .map(|entries| {
-                entries.flatten().any(|entry| {
-                    entry
-                        .file_name()
-                        .to_string_lossy()
-                        .starts_with("openspec-")
-                })
+                entries
+                    .flatten()
+                    .any(|entry| entry.file_name().to_string_lossy().starts_with("openspec-"))
             })
             .unwrap_or(false);
 
@@ -827,27 +821,22 @@ content"#
     #[test]
     fn test_skill_content_contains_generated_by() {
         let temp_dir = TempDir::new().unwrap();
-        let _ = generate_workspace_agent_skills(
-            temp_dir.path(),
-            vec!["claude".to_string()],
-        );
+        let _ = generate_workspace_agent_skills(temp_dir.path(), vec!["claude".to_string()]);
 
         let skills_dir = temp_dir.path().join(".claude/skills");
         let entries = fs::read_dir(&skills_dir).unwrap();
 
         let mut found_skill = false;
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let skill_md = entry.path().join("SKILL.md");
-                if skill_md.exists() {
-                    let content = fs::read_to_string(&skill_md).unwrap();
-                    assert!(
-                        content.contains("generatedBy: \"OpenSpec v"),
-                        "Skill file should contain generatedBy version"
-                    );
-                    found_skill = true;
-                    break;
-                }
+        for entry in entries.flatten() {
+            let skill_md = entry.path().join("SKILL.md");
+            if skill_md.exists() {
+                let content = fs::read_to_string(&skill_md).unwrap();
+                assert!(
+                    content.contains("generatedBy: \"OpenSpec v"),
+                    "Skill file should contain generatedBy version"
+                );
+                found_skill = true;
+                break;
             }
         }
 
@@ -857,25 +846,20 @@ content"#
     #[test]
     fn test_opencode_transform() {
         let temp_dir = TempDir::new().unwrap();
-        let _ = generate_workspace_agent_skills(
-            temp_dir.path(),
-            vec!["opencode".to_string()],
-        );
+        let _ = generate_workspace_agent_skills(temp_dir.path(), vec!["opencode".to_string()]);
 
         let skills_dir = temp_dir.path().join(".opencode/skills");
         let entries = fs::read_dir(&skills_dir).unwrap();
 
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let skill_md = entry.path().join("SKILL.md");
-                if skill_md.exists() {
-                    let content = fs::read_to_string(&skill_md).unwrap();
-                    // If the template contains /opsx:, it should be transformed to /opsx-
-                    if content.contains("/opsx-") {
-                        // Verify no untransformed commands remain
-                        assert!(!content.contains("/opsx:"));
-                        break;
-                    }
+        for entry in entries.flatten() {
+            let skill_md = entry.path().join("SKILL.md");
+            if skill_md.exists() {
+                let content = fs::read_to_string(&skill_md).unwrap();
+                // If the template contains /opsx:, it should be transformed to /opsx-
+                if content.contains("/opsx-") {
+                    // Verify no untransformed commands remain
+                    assert!(!content.contains("/opsx:"));
+                    break;
                 }
             }
         }
@@ -886,10 +870,7 @@ content"#
         let temp_dir = TempDir::new().unwrap();
 
         // First generation
-        let result1 = generate_workspace_agent_skills(
-            temp_dir.path(),
-            vec!["claude".to_string()],
-        );
+        let result1 = generate_workspace_agent_skills(temp_dir.path(), vec!["claude".to_string()]);
         let report1 = result1.unwrap();
 
         // Create a mock skill state to simulate previous installation

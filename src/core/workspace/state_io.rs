@@ -104,7 +104,10 @@ pub fn read_workspace_view_state(workspace_root: &Path) -> Result<WorkspaceViewS
         }
     };
 
-    Ok(workspace_state_parts_to_view_state(shared_state, local_state))
+    Ok(workspace_state_parts_to_view_state(
+        shared_state,
+        local_state,
+    ))
 }
 
 /// Read workspace view state, returning None if neither view.yaml nor legacy files exist.
@@ -138,7 +141,10 @@ pub fn read_optional_workspace_view_state(
         }
     };
 
-    Ok(Some(workspace_state_parts_to_view_state(shared_state, local_state)))
+    Ok(Some(workspace_state_parts_to_view_state(
+        shared_state,
+        local_state,
+    )))
 }
 
 /// Write workspace view state to the workspace root.
@@ -318,7 +324,10 @@ links:
             read_workspace_view_state(ws_root).expect("failed to read workspace view state");
         assert_eq!(state.name, "test-ws");
         assert!(state.context.is_none());
-        assert_eq!(state.links.get("repo"), Some(&Some("/abs/path".to_string())));
+        assert_eq!(
+            state.links.get("repo"),
+            Some(&Some("/abs/path".to_string()))
+        );
     }
 
     #[test]

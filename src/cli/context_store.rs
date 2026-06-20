@@ -1,7 +1,5 @@
 use crate::cli::args::ContextStoreCommands;
-use crate::core::context_store::{
-    self, DoctorResult, ListResult, MutationResult, CleanupResult,
-};
+use crate::core::context_store::{self, CleanupResult, DoctorResult, ListResult, MutationResult};
 
 pub fn run(cmd: ContextStoreCommands) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
@@ -11,30 +9,20 @@ pub fn run(cmd: ContextStoreCommands) -> Result<(), Box<dyn std::error::Error>> 
             init_git,
             allow_inside_git_repository,
             json,
-        } => {
-            run_setup(
-                id.as_deref(),
-                path.as_deref(),
-                init_git,
-                allow_inside_git_repository,
-                json,
-            )
-        }
+        } => run_setup(
+            id.as_deref(),
+            path.as_deref(),
+            init_git,
+            allow_inside_git_repository,
+            json,
+        ),
         ContextStoreCommands::Register { path, id, json } => {
             run_register(path.as_deref(), id.as_deref(), json)
         }
-        ContextStoreCommands::Unregister { id, json } => {
-            run_unregister(&id, json)
-        }
-        ContextStoreCommands::Remove { id, yes, json } => {
-            run_remove(&id, yes, json)
-        }
-        ContextStoreCommands::List { json } => {
-            run_list(json)
-        }
-        ContextStoreCommands::Doctor { id, json } => {
-            run_doctor(id.as_deref(), json)
-        }
+        ContextStoreCommands::Unregister { id, json } => run_unregister(&id, json),
+        ContextStoreCommands::Remove { id, yes, json } => run_remove(&id, yes, json),
+        ContextStoreCommands::List { json } => run_list(json),
+        ContextStoreCommands::Doctor { id, json } => run_doctor(id.as_deref(), json),
     }
 }
 
@@ -45,14 +33,9 @@ fn run_setup(
     allow_inside_git_repository: bool,
     json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let result = context_store::setup_context_store(
-        id,
-        path,
-        init_git,
-        allow_inside_git_repository,
-        None,
-    )
-        .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)?;
+    let result =
+        context_store::setup_context_store(id, path, init_git, allow_inside_git_repository, None)
+            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error>)?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&result)?);
@@ -146,7 +129,10 @@ fn print_mutation_human(title: &str, result: &MutationResult) {
     println!("{}: {}", title, result.store.id);
     println!("Location: {}", result.store.root);
     println!();
-    println!("Next: ask your agent to create an initiative in {}.", result.store.id);
+    println!(
+        "Next: ask your agent to create an initiative in {}.",
+        result.store.id
+    );
 }
 
 fn print_cleanup_human(title: &str, result: &CleanupResult) {

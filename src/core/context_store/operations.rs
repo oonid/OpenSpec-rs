@@ -123,10 +123,7 @@ fn read_optional_metadata(store_root: &Path) -> Result<Option<MetadataState>, St
 }
 
 /// Write metadata if it's missing. Returns true if metadata was created, false if it already existed.
-fn write_metadata_if_missing(
-    store_root: &Path,
-    id: &str,
-) -> Result<bool, String> {
+fn write_metadata_if_missing(store_root: &Path, id: &str) -> Result<bool, String> {
     let metadata_path = get_context_store_metadata_path(store_root);
 
     // Check if metadata already exists
@@ -287,7 +284,9 @@ fn infer_store_id_from_path(store_root: &Path) -> Result<String, String> {
     let basename = store_root
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| "Cannot infer store id from path: invalid UTF-8 or empty path".to_string())?;
+        .ok_or_else(|| {
+            "Cannot infer store id from path: invalid UTF-8 or empty path".to_string()
+        })?;
 
     // Mirror upstream `inferStoreIdFromPath`: validate the basename and use it as-is. Upstream
     // does NOT sanitize — an invalid basename is an error so the user passes an explicit --id.
@@ -319,9 +318,7 @@ pub fn setup_context_store(
             id.to_string()
         }
         (None, Some(_)) => {
-            return Err(
-                "Context store id is required when providing an explicit path".to_string()
-            );
+            return Err("Context store id is required when providing an explicit path".to_string());
         }
         (None, None) => {
             return Err("Context store id is required (or provide --path)".to_string());
@@ -350,18 +347,12 @@ pub fn setup_context_store(
     // If the directory doesn't exist, create it (with cleanup on failure).
     let created_dir = matches!(kind, PathKind::Missing);
     if created_dir {
-        fs::create_dir_all(&store_root).map_err(|e| {
-            format!("Failed to create context store directory: {}", e)
-        })?;
+        fs::create_dir_all(&store_root)
+            .map_err(|e| format!("Failed to create context store directory: {}", e))?;
     }
 
     // Run the setup, with cleanup-on-failure if we created a directory.
-    match run_setup_setup(
-        &store_id,
-        &store_root,
-        init_git,
-        global_data_dir,
-    ) {
+    match run_setup_setup(&store_id, &store_root, init_git, global_data_dir) {
         Ok(result) => Ok(result),
         Err(e) => {
             if created_dir {
@@ -403,10 +394,9 @@ fn run_setup_setup(
     let metadata_created = write_metadata_if_missing(store_root, store_id)?;
 
     // Update registry
-    registry.stores.insert(
-        store_id.to_string(),
-        RegistryEntryState { backend },
-    );
+    registry
+        .stores
+        .insert(store_id.to_string(), RegistryEntryState { backend });
     save_registry(&registry, global_data_dir)?;
 
     // Determine created artifacts
@@ -423,7 +413,11 @@ fn run_setup_setup(
         store: ContextStoreInfo {
             id: store_id.to_string(),
             root: store_root.to_string_lossy().to_string(),
-            metadata_path: Some(get_context_store_metadata_path(store_root).to_string_lossy().to_string()),
+            metadata_path: Some(
+                get_context_store_metadata_path(store_root)
+                    .to_string_lossy()
+                    .to_string(),
+            ),
         },
         git: GitStatus {
             is_repository,
@@ -472,10 +466,7 @@ pub fn register_existing_context_store(
 
     // Validate explicit id if provided
     let explicit_id = id
-        .map(|i| {
-            validate_context_store_id(i)
-                .map(|_| i.to_string())
-        })
+        .map(|i| validate_context_store_id(i).map(|_| i.to_string()))
         .transpose()?;
 
     // Check for id mismatches
@@ -498,7 +489,8 @@ pub fn register_existing_context_store(
         .or_else(|| explicit_id)
         .or_else(|| infer_store_id_from_path(&store_root).ok())
         .ok_or_else(|| {
-            "Could not determine context store id; provide --id or use a path with a valid name".to_string()
+            "Could not determine context store id; provide --id or use a path with a valid name"
+                .to_string()
         })?;
 
     // Load the registry
@@ -518,10 +510,9 @@ pub fn register_existing_context_store(
     let metadata_created = write_metadata_if_missing(&store_root, &store_id)?;
 
     // Update registry
-    registry.stores.insert(
-        store_id.to_string(),
-        RegistryEntryState { backend },
-    );
+    registry
+        .stores
+        .insert(store_id.to_string(), RegistryEntryState { backend });
     save_registry(&registry, global_data_dir)?;
 
     // Determine created artifacts
@@ -538,7 +529,11 @@ pub fn register_existing_context_store(
         store: ContextStoreInfo {
             id: store_id,
             root: store_root.to_string_lossy().to_string(),
-            metadata_path: Some(get_context_store_metadata_path(&store_root).to_string_lossy().to_string()),
+            metadata_path: Some(
+                get_context_store_metadata_path(&store_root)
+                    .to_string_lossy()
+                    .to_string(),
+            ),
         },
         git: GitStatus {
             is_repository,
@@ -654,9 +649,8 @@ pub fn remove_context_store(
     }
 
     // Delete the directory
-    fs::remove_dir_all(&store_root_path).map_err(|e| {
-        format!("Failed to delete context store directory: {}", e)
-    })?;
+    fs::remove_dir_all(&store_root_path)
+        .map_err(|e| format!("Failed to delete context store directory: {}", e))?;
 
     Ok(CleanupResult {
         store: ContextStoreInfo {
@@ -700,10 +694,7 @@ pub fn doctor_context_stores(
     // Filter to the requested id if provided
     let selected: Vec<_> = if let Some(target_id) = id {
         validate_context_store_id(target_id)?;
-        entries
-            .into_iter()
-            .filter(|e| e.id == target_id)
-            .collect()
+        entries.into_iter().filter(|e| e.id == target_id).collect()
     } else {
         entries
     };
@@ -749,13 +740,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("create temp dir");
         let global_data_dir = Some(temp_dir.path());
 
-        let result = setup_context_store(
-            Some("test-store"),
-            None,
-            false,
-            false,
-            global_data_dir,
-        ).expect("setup failed");
+        let result = setup_context_store(Some("test-store"), None, false, false, global_data_dir)
+            .expect("setup failed");
 
         assert_eq!(result.store.id, "test-store");
         assert!(!result.git.is_repository);
@@ -783,17 +769,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("create temp dir");
         let global_data_dir = Some(temp_dir.path());
 
-        let result = setup_context_store(
-            Some("git-store"),
-            None,
-            true,
-            false,
-            global_data_dir,
-        ).expect("setup failed");
+        let result = setup_context_store(Some("git-store"), None, true, false, global_data_dir)
+            .expect("setup failed");
 
         assert_eq!(result.store.id, "git-store");
         assert!(result.git.initialized); // Should be true if git succeeded
-        // git.is_repository should match whether git init actually worked
+                                         // git.is_repository should match whether git init actually worked
 
         let store_root = PathBuf::from(&result.store.root);
         assert!(store_root.exists());
@@ -809,7 +790,8 @@ mod tests {
         assert!(result.is_err());
 
         // No id, has path → error
-        let result = setup_context_store(None, Some("/tmp/somepath"), false, false, global_data_dir);
+        let result =
+            setup_context_store(None, Some("/tmp/somepath"), false, false, global_data_dir);
         assert!(result.is_err());
     }
 
@@ -819,13 +801,9 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // First set up a store
-        let setup_result = setup_context_store(
-            Some("my-store"),
-            None,
-            false,
-            false,
-            global_data_dir,
-        ).expect("setup failed");
+        let setup_result =
+            setup_context_store(Some("my-store"), None, false, false, global_data_dir)
+                .expect("setup failed");
 
         let store_root = PathBuf::from(&setup_result.store.root);
 
@@ -839,7 +817,8 @@ mod tests {
             Some(store_root.to_str().unwrap()),
             None,
             global_data_dir,
-        ).expect("register failed");
+        )
+        .expect("register failed");
 
         assert_eq!(register_result.store.id, "my-store");
         assert!(!register_result.git.initialized);
@@ -904,21 +883,16 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // Set up a store
-        setup_context_store(
-            Some("my-store"),
-            None,
-            false,
-            false,
-            global_data_dir,
-        ).expect("setup failed");
+        setup_context_store(Some("my-store"), None, false, false, global_data_dir)
+            .expect("setup failed");
 
         // Verify it's registered
         let registry = load_registry(global_data_dir);
         assert!(registry.stores.contains_key("my-store"));
 
         // Unregister it
-        let cleanup_result = unregister_context_store("my-store", global_data_dir)
-            .expect("unregister failed");
+        let cleanup_result =
+            unregister_context_store("my-store", global_data_dir).expect("unregister failed");
 
         assert_eq!(cleanup_result.store.id, "my-store");
         assert!(cleanup_result.registry_removed);
@@ -940,20 +914,16 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // Set up a store
-        let setup_result = setup_context_store(
-            Some("to-delete"),
-            None,
-            false,
-            false,
-            global_data_dir,
-        ).expect("setup failed");
+        let setup_result =
+            setup_context_store(Some("to-delete"), None, false, false, global_data_dir)
+                .expect("setup failed");
 
         let store_root = PathBuf::from(&setup_result.store.root);
         assert!(store_root.exists());
 
         // Remove it
-        let cleanup_result = remove_context_store("to-delete", global_data_dir)
-            .expect("remove failed");
+        let cleanup_result =
+            remove_context_store("to-delete", global_data_dir).expect("remove failed");
 
         assert_eq!(cleanup_result.store.id, "to-delete");
         assert!(cleanup_result.registry_removed);
@@ -970,13 +940,9 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // Create a store
-        let setup_result = setup_context_store(
-            Some("no-meta"),
-            None,
-            false,
-            false,
-            global_data_dir,
-        ).expect("setup failed");
+        let setup_result =
+            setup_context_store(Some("no-meta"), None, false, false, global_data_dir)
+                .expect("setup failed");
 
         let store_root = PathBuf::from(&setup_result.store.root);
 
@@ -996,12 +962,9 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // Set up a few stores
-        setup_context_store(Some("store-a"), None, false, false, global_data_dir)
-            .expect("setup a");
-        setup_context_store(Some("store-b"), None, false, false, global_data_dir)
-            .expect("setup b");
-        setup_context_store(Some("store-c"), None, false, false, global_data_dir)
-            .expect("setup c");
+        setup_context_store(Some("store-a"), None, false, false, global_data_dir).expect("setup a");
+        setup_context_store(Some("store-b"), None, false, false, global_data_dir).expect("setup b");
+        setup_context_store(Some("store-c"), None, false, false, global_data_dir).expect("setup c");
 
         let result = list_context_stores(global_data_dir);
 
@@ -1020,8 +983,7 @@ mod tests {
             .expect("setup failed");
 
         // Doctor all stores
-        let result = doctor_context_stores(None, global_data_dir)
-            .expect("doctor failed");
+        let result = doctor_context_stores(None, global_data_dir).expect("doctor failed");
 
         assert_eq!(result.stores.len(), 1);
         let store = &result.stores[0];
@@ -1030,8 +992,8 @@ mod tests {
         assert!(store.metadata_valid);
 
         // Now doctor a specific store
-        let result = doctor_context_stores(Some("healthy-store"), global_data_dir)
-            .expect("doctor failed");
+        let result =
+            doctor_context_stores(Some("healthy-store"), global_data_dir).expect("doctor failed");
         assert_eq!(result.stores.len(), 1);
     }
 
@@ -1041,13 +1003,9 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // Set up a store
-        let setup_result = setup_context_store(
-            Some("bad-meta"),
-            None,
-            false,
-            false,
-            global_data_dir,
-        ).expect("setup failed");
+        let setup_result =
+            setup_context_store(Some("bad-meta"), None, false, false, global_data_dir)
+                .expect("setup failed");
 
         let store_root = PathBuf::from(&setup_result.store.root);
 
@@ -1056,8 +1014,7 @@ mod tests {
         fs::write(&metadata_path, "invalid: yaml: content:").expect("corrupt metadata");
 
         // Doctor should detect this
-        let result = doctor_context_stores(None, global_data_dir)
-            .expect("doctor failed");
+        let result = doctor_context_stores(None, global_data_dir).expect("doctor failed");
 
         assert_eq!(result.stores.len(), 1);
         let store = &result.stores[0];
@@ -1072,13 +1029,7 @@ mod tests {
         let global_data_dir = Some(temp_dir.path());
 
         // Try to set up with an invalid id; should fail and not leave a directory
-        let result = setup_context_store(
-            Some("INVALID"),
-            None,
-            false,
-            false,
-            global_data_dir,
-        );
+        let result = setup_context_store(Some("INVALID"), None, false, false, global_data_dir);
 
         assert!(result.is_err());
 
@@ -1101,14 +1052,16 @@ mod tests {
         super::super::foundation::write_file_atomically(
             &metadata_path,
             &serialize_metadata_state(&metadata).unwrap(),
-        ).expect("write metadata");
+        )
+        .expect("write metadata");
 
         // Register without specifying an id; should infer from path
         let result = register_existing_context_store(
             Some(store_dir.to_str().unwrap()),
             None,
             Some(temp_dir.path()),
-        ).expect("register failed");
+        )
+        .expect("register failed");
 
         assert_eq!(result.store.id, "my-store");
     }
@@ -1121,7 +1074,7 @@ mod tests {
 
         // Initialize a git repository in git_dir
         Command::new("git")
-            .args(&["init", "-q"])
+            .args(["init", "-q"])
             .current_dir(&git_dir)
             .output()
             .expect("git init failed");
@@ -1151,7 +1104,7 @@ mod tests {
 
         // Initialize a git repository
         Command::new("git")
-            .args(&["init", "-q"])
+            .args(["init", "-q"])
             .current_dir(&git_dir)
             .output()
             .expect("git init failed");
@@ -1203,7 +1156,7 @@ mod tests {
         let result = setup_context_store(
             Some("repo-store"),
             None,
-            true, // init_git
+            true,  // init_git
             false, // allow_inside_git_repository
             global_data_dir,
         );
@@ -1223,7 +1176,7 @@ mod tests {
 
         // Initialize git repo
         Command::new("git")
-            .args(&["init", "-q"])
+            .args(["init", "-q"])
             .current_dir(&git_dir)
             .output()
             .expect("git init failed");

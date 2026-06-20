@@ -235,8 +235,8 @@ pub fn get_default_workspace_opener_choice_value(choices: &[WorkspaceOpenerChoic
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::foundation::validate_workspace_preferred_opener;
+    use super::*;
 
     #[test]
     fn test_parse_workspace_preferred_opener_value_editor() {
@@ -371,7 +371,10 @@ mod tests {
             kind: super::super::foundation::OpenerKind::Agent,
             id: "github-copilot".into(),
         };
-        assert_eq!(get_workspace_opener_label(&opener), "GitHub Copilot in VS Code");
+        assert_eq!(
+            get_workspace_opener_label(&opener),
+            "GitHub Copilot in VS Code"
+        );
     }
 
     #[test]
@@ -439,8 +442,8 @@ mod tests {
     #[test]
     fn test_is_executable_file_with_real_file() {
         // Use a tempfile to test the executable detection
-        use tempfile::NamedTempFile;
         use std::os::unix::fs::PermissionsExt;
+        use tempfile::NamedTempFile;
 
         #[cfg(unix)]
         {
@@ -525,19 +528,17 @@ mod tests {
 
     #[test]
     fn test_get_default_workspace_opener_choice_value_with_none_available() {
-        let choices = vec![
-            WorkspaceOpenerChoice {
-                value: "claude".to_string(),
-                label: "Claude".to_string(),
-                opener: PreferredOpener {
-                    kind: super::super::foundation::OpenerKind::Agent,
-                    id: "claude".into(),
-                },
-                executable: "claude".to_string(),
-                available: false,
-                unavailable_note: Some("claude not found on PATH".to_string()),
+        let choices = vec![WorkspaceOpenerChoice {
+            value: "claude".to_string(),
+            label: "Claude".to_string(),
+            opener: PreferredOpener {
+                kind: super::super::foundation::OpenerKind::Agent,
+                id: "claude".into(),
             },
-        ];
+            executable: "claude".to_string(),
+            available: false,
+            unavailable_note: Some("claude not found on PATH".to_string()),
+        }];
 
         assert_eq!(
             get_default_workspace_opener_choice_value(&choices),
@@ -556,7 +557,12 @@ mod tests {
         let exts = get_path_exts(None, true);
         assert_eq!(
             exts,
-            vec![".COM".to_string(), ".EXE".to_string(), ".BAT".to_string(), ".CMD".to_string()]
+            vec![
+                ".COM".to_string(),
+                ".EXE".to_string(),
+                ".BAT".to_string(),
+                ".CMD".to_string()
+            ]
         );
     }
 

@@ -7,7 +7,8 @@ pub const WORKSPACE_METADATA_DIR_NAME: &str = ".openspec-workspace";
 pub const WORKSPACE_VIEW_STATE_FILE_NAME: &str = "view.yaml";
 pub const WORKSPACE_CHANGES_DIR_NAME: &str = "changes";
 pub const WORKSPACE_CODE_WORKSPACE_EXTENSION: &str = ".code-workspace";
-pub const WORKSPACE_SUPPORTED_OPENER_VALUES: &[&str] = &["codex-cli", "claude", "github-copilot", "editor"];
+pub const WORKSPACE_SUPPORTED_OPENER_VALUES: &[&str] =
+    &["codex-cli", "claude", "github-copilot", "editor"];
 pub const WORKSPACE_AGENT_OPENER_IDS: &[&str] = &["codex-cli", "claude", "github-copilot"];
 pub const WORKSPACE_EDITOR_OPENER_IDS: &[&str] = &["vscode"];
 
@@ -69,7 +70,9 @@ pub fn get_workspace_changes_dir(workspace_root: &Path) -> PathBuf {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 pub enum ContextStoreSelector {
-    Registry { id: String },
+    Registry {
+        id: String,
+    },
     Path {
         path: String,
         #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -156,8 +159,7 @@ pub fn parse_workspace_view_state(content: &str) -> Result<WorkspaceViewState, S
     }
 
     // Validate workspace name
-    validate_workspace_name(&parsed.name)
-        .map_err(|e| format!("Invalid workspace name: {}", e))?;
+    validate_workspace_name(&parsed.name).map_err(|e| format!("Invalid workspace name: {}", e))?;
 
     // Validate all link names
     for link_name in parsed.links.keys() {
@@ -170,8 +172,7 @@ pub fn parse_workspace_view_state(content: &str) -> Result<WorkspaceViewState, S
 
 pub fn serialize_workspace_view_state(state: &WorkspaceViewState) -> Result<String, String> {
     // Validate workspace name
-    validate_workspace_name(&state.name)
-        .map_err(|e| format!("Invalid workspace name: {}", e))?;
+    validate_workspace_name(&state.name).map_err(|e| format!("Invalid workspace name: {}", e))?;
 
     // Validate all link names and that values are strings or null
     for link_name in state.links.keys() {
@@ -179,7 +180,8 @@ pub fn serialize_workspace_view_state(state: &WorkspaceViewState) -> Result<Stri
             .map_err(|e| format!("Invalid workspace link name '{}': {}", link_name, e))?;
     }
 
-    serde_yaml::to_string(state).map_err(|e| format!("Failed to serialize workspace view state: {}", e))
+    serde_yaml::to_string(state)
+        .map_err(|e| format!("Failed to serialize workspace view state: {}", e))
 }
 
 // Opener-related functions
@@ -275,7 +277,10 @@ pub fn get_workspace_code_workspace_file_name(name: &str) -> Result<String, Stri
     Ok(format!("{}{}", name, WORKSPACE_CODE_WORKSPACE_EXTENSION))
 }
 
-pub fn get_workspace_code_workspace_path(workspace_root: &Path, name: &str) -> Result<PathBuf, String> {
+pub fn get_workspace_code_workspace_path(
+    workspace_root: &Path,
+    name: &str,
+) -> Result<PathBuf, String> {
     Ok(workspace_root.join(get_workspace_code_workspace_file_name(name)?))
 }
 

@@ -1,6 +1,7 @@
 use crate::core::workspace::foundation::{
     get_workspace_code_workspace_file_name, get_workspace_code_workspace_path,
-    get_workspace_context_initiative_id, ContextStoreSelector, WorkspaceContext, WorkspaceViewState,
+    get_workspace_context_initiative_id, ContextStoreSelector, WorkspaceContext,
+    WorkspaceViewState,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -87,9 +88,7 @@ pub struct WorkspaceOpenSurfaceGeneration {
 }
 
 // Helper to format guidance path list
-fn format_guidance_path_list(
-    items: &[(&str, &str)],
-) -> String {
+fn format_guidance_path_list(items: &[(&str, &str)]) -> String {
     if items.is_empty() {
         return "- None selected yet.".to_string();
     }
@@ -156,8 +155,7 @@ This workspace is not bound to an initiative. It is still a first-class local vi
             "- Context store: {}\n\
              - Initiative: {}\n\
              - Run `openspec workspace open --json` to refresh resolved local paths for this view.",
-            stored_context_store,
-            stored_initiative_id
+            stored_context_store, stored_initiative_id
         )
     };
 
@@ -196,7 +194,10 @@ pub fn build_workspace_guidance_block(
 
     format!(
         "{}\n{}{}{}",
-        WORKSPACE_GUIDANCE_START_MARKER, WORKSPACE_GUIDANCE_BODY, context_guidance, WORKSPACE_GUIDANCE_END_MARKER
+        WORKSPACE_GUIDANCE_START_MARKER,
+        WORKSPACE_GUIDANCE_BODY,
+        context_guidance,
+        WORKSPACE_GUIDANCE_END_MARKER
     )
 }
 
@@ -241,16 +242,21 @@ pub fn build_workspace_code_workspace_content(
     links: &[WorkspaceOpenLink],
     resolved_context: Option<&WorkspaceOpenResolvedContext>,
 ) -> String {
-    let mut folders: Vec<serde_json::Map<String, serde_json::Value>> =
-        links
-            .iter()
-            .map(|link| {
-                let mut folder = serde_json::Map::new();
-                folder.insert("name".to_string(), serde_json::Value::String(link.name.clone()));
-                folder.insert("path".to_string(), serde_json::Value::String(link.path.clone()));
-                folder
-            })
-            .collect();
+    let mut folders: Vec<serde_json::Map<String, serde_json::Value>> = links
+        .iter()
+        .map(|link| {
+            let mut folder = serde_json::Map::new();
+            folder.insert(
+                "name".to_string(),
+                serde_json::Value::String(link.name.clone()),
+            );
+            folder.insert(
+                "path".to_string(),
+                serde_json::Value::String(link.path.clone()),
+            );
+            folder
+        })
+        .collect();
 
     if let Some(resolved) = resolved_context {
         let mut initiative_folder = serde_json::Map::new();
@@ -270,7 +276,10 @@ pub fn build_workspace_code_workspace_content(
         "name".to_string(),
         serde_json::Value::String(WORKSPACE_OPEN_ROOT_FOLDER_LABEL.to_string()),
     );
-    root_folder.insert("path".to_string(), serde_json::Value::String(".".to_string()));
+    root_folder.insert(
+        "path".to_string(),
+        serde_json::Value::String(".".to_string()),
+    );
     folders.push(root_folder);
 
     let mut root = serde_json::Map::new();
@@ -284,9 +293,7 @@ pub fn build_workspace_code_workspace_content(
 }
 
 /// Resolve workspace open links, checking which ones are valid.
-pub fn resolve_workspace_open_links(
-    view_state: &WorkspaceViewState,
-) -> WorkspaceOpenSurfaceLinks {
+pub fn resolve_workspace_open_links(view_state: &WorkspaceViewState) -> WorkspaceOpenSurfaceLinks {
     let mut links = Vec::new();
     let mut skipped = Vec::new();
 
@@ -338,13 +345,15 @@ pub fn sync_workspace_open_surface(
     // Write AGENTS.md
     let agents_path = workspace_root.join("AGENTS.md");
     let existing_content = std::fs::read_to_string(&agents_path).unwrap_or_default();
-    let new_content = apply_workspace_guidance_block(&existing_content, Some(view_state), resolved_context)?;
+    let new_content =
+        apply_workspace_guidance_block(&existing_content, Some(view_state), resolved_context)?;
     write_file_atomically(&agents_path, &new_content)
         .map_err(|e| format!("Failed to write AGENTS.md: {}", e))?;
 
     // Write .code-workspace file
     let code_workspace_path = get_workspace_code_workspace_path(workspace_root, &view_state.name)?;
-    let workspace_content = build_workspace_code_workspace_content(&open_links.links, resolved_context);
+    let workspace_content =
+        build_workspace_code_workspace_content(&open_links.links, resolved_context);
     write_file_atomically(&code_workspace_path, &workspace_content)
         .map_err(|e| format!("Failed to write code-workspace file: {}", e))?;
 
@@ -374,7 +383,9 @@ pub fn sync_workspace_open_surface(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::workspace::foundation::{ContextStoreBinding, ContextStoreSelector, WorkspaceInitiativeRef};
+    use crate::core::workspace::foundation::{
+        ContextStoreBinding, ContextStoreSelector, WorkspaceInitiativeRef,
+    };
     use std::collections::BTreeMap;
     use tempfile::TempDir;
 
@@ -488,27 +499,23 @@ mod tests {
 
     #[test]
     fn test_code_workspace_content_has_folders() {
-        let links = vec![
-            WorkspaceOpenLink {
-                name: "repo".to_string(),
-                path: "/path/to/repo".to_string(),
-            },
-        ];
+        let links = vec![WorkspaceOpenLink {
+            name: "repo".to_string(),
+            path: "/path/to/repo".to_string(),
+        }];
         let content = build_workspace_code_workspace_content(&links, None);
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert!(parsed.get("folders").is_some());
         let folders = parsed["folders"].as_array().unwrap();
-        assert!(folders.len() > 0);
+        assert!(!folders.is_empty());
     }
 
     #[test]
     fn test_code_workspace_ends_with_root_folder() {
-        let links = vec![
-            WorkspaceOpenLink {
-                name: "repo".to_string(),
-                path: "/path/to/repo".to_string(),
-            },
-        ];
+        let links = vec![WorkspaceOpenLink {
+            name: "repo".to_string(),
+            path: "/path/to/repo".to_string(),
+        }];
         let content = build_workspace_code_workspace_content(&links, None);
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         let folders = parsed["folders"].as_array().unwrap();
@@ -564,14 +571,20 @@ mod tests {
         let result = resolve_workspace_open_links(&view_state);
         assert_eq!(result.links.len(), 0);
         assert_eq!(result.skipped.len(), 1);
-        assert_eq!(result.skipped[0].reason, WorkspaceSkippedReason::MissingLocalPath);
+        assert_eq!(
+            result.skipped[0].reason,
+            WorkspaceSkippedReason::MissingLocalPath
+        );
         assert_eq!(result.skipped[0].path, None);
     }
 
     #[test]
     fn test_resolve_links_path_missing() {
         let mut links = BTreeMap::new();
-        links.insert("bad-path".to_string(), Some("/nonexistent/path".to_string()));
+        links.insert(
+            "bad-path".to_string(),
+            Some("/nonexistent/path".to_string()),
+        );
 
         let view_state = WorkspaceViewState {
             version: 1,
@@ -586,7 +599,10 @@ mod tests {
         let result = resolve_workspace_open_links(&view_state);
         assert_eq!(result.links.len(), 0);
         assert_eq!(result.skipped.len(), 1);
-        assert_eq!(result.skipped[0].reason, WorkspaceSkippedReason::PathMissing);
+        assert_eq!(
+            result.skipped[0].reason,
+            WorkspaceSkippedReason::PathMissing
+        );
         assert_eq!(
             result.skipped[0].path.as_ref().unwrap(),
             "/nonexistent/path"
@@ -624,7 +640,10 @@ mod tests {
         let workspace_root = temp.path();
 
         let mut links = BTreeMap::new();
-        links.insert("test".to_string(), Some(workspace_root.to_string_lossy().to_string()));
+        links.insert(
+            "test".to_string(),
+            Some(workspace_root.to_string_lossy().to_string()),
+        );
 
         let view_state = WorkspaceViewState {
             version: 1,
@@ -664,7 +683,10 @@ mod tests {
         let workspace_root = temp.path();
 
         let mut links = BTreeMap::new();
-        links.insert("test".to_string(), Some(workspace_root.to_string_lossy().to_string()));
+        links.insert(
+            "test".to_string(),
+            Some(workspace_root.to_string_lossy().to_string()),
+        );
 
         let view_state = WorkspaceViewState {
             version: 1,
@@ -686,8 +708,18 @@ mod tests {
 
         let agents_content = std::fs::read_to_string(workspace_root.join("AGENTS.md")).unwrap();
         // Should only have one set of markers
-        assert_eq!(agents_content.matches(WORKSPACE_GUIDANCE_START_MARKER).count(), 1);
-        assert_eq!(agents_content.matches(WORKSPACE_GUIDANCE_END_MARKER).count(), 1);
+        assert_eq!(
+            agents_content
+                .matches(WORKSPACE_GUIDANCE_START_MARKER)
+                .count(),
+            1
+        );
+        assert_eq!(
+            agents_content
+                .matches(WORKSPACE_GUIDANCE_END_MARKER)
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -700,7 +732,10 @@ mod tests {
         std::fs::write(&gitignore_path, "my-ws.code-workspace").unwrap();
 
         let mut links = BTreeMap::new();
-        links.insert("test".to_string(), Some(workspace_root.to_string_lossy().to_string()));
+        links.insert(
+            "test".to_string(),
+            Some(workspace_root.to_string_lossy().to_string()),
+        );
 
         let view_state = WorkspaceViewState {
             version: 1,
@@ -728,7 +763,10 @@ mod tests {
         std::fs::write(&gitignore_path, "my-ws.code-workspace\nother-pattern").unwrap();
 
         let mut links = BTreeMap::new();
-        links.insert("test".to_string(), Some(workspace_root.to_string_lossy().to_string()));
+        links.insert(
+            "test".to_string(),
+            Some(workspace_root.to_string_lossy().to_string()),
+        );
 
         let view_state = WorkspaceViewState {
             version: 1,
