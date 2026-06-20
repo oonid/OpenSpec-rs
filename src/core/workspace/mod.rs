@@ -1,3 +1,4 @@
+pub mod commands_support;
 pub mod foundation;
 pub mod legacy_state;
 pub mod openers;
@@ -62,4 +63,9 @@ pub use skills::{
     has_workspace_skill_profile_drift, parse_workspace_skill_tools_value,
     update_workspace_agent_skills, WorkspaceSkillAgentResult, WorkspaceSkillFailedResult,
     WorkspaceSkillInstallationReport, WorkspaceSkillRemovedResult, WorkspaceSkillSkippedResult,
+};
+
+pub use commands_support::{
+    add_workspace_link, infer_link_name, resolve_existing_directory, resolve_selected_workspace,
+    update_workspace_link, SelectedWorkspace, WorkspaceStatus,
 };

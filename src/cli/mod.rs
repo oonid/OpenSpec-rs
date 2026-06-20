@@ -13,5 +13,6 @@ mod show;
 mod status;
 mod update;
 mod validate;
+mod workspace;
 
 pub use args::run;

@@ -168,6 +168,9 @@ pub enum Commands {
 
     #[command(subcommand, about = "Create and inspect coordinated initiatives")]
     Initiative(InitiativeCommands),
+
+    #[command(subcommand, about = "Set up and inspect coordination workspaces")]
+    Workspace(WorkspaceCommands),
 }
 
 #[derive(Subcommand, Debug)]
@@ -303,6 +306,44 @@ pub enum InitiativeCommands {
     },
 }
 
+#[derive(Subcommand, Debug)]
+pub enum WorkspaceCommands {
+    #[command(visible_alias = "ls", about = "List known OpenSpec workspaces")]
+    List {
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Link an existing repo or folder to a workspace")]
+    Link {
+        #[arg(help = "Link name or path")]
+        name_or_path: Option<String>,
+        #[arg(help = "Path (when first arg is a name)")]
+        path: Option<String>,
+        #[arg(long, help = "Workspace name from known local workspace views")]
+        workspace: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Update the local path for an existing workspace link")]
+    Relink {
+        #[arg(help = "Link name")]
+        name: String,
+        #[arg(help = "New path")]
+        path: String,
+        #[arg(long, help = "Workspace name from known local workspace views")]
+        workspace: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Check what a workspace can resolve on this machine")]
+    Doctor {
+        #[arg(long, help = "Workspace name from known local workspace views")]
+        workspace: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+}
+
 fn get_command_path(cli: &Cli) -> String {
     match &cli.command {
         Commands::Init { .. } => "init".to_string(),
@@ -333,6 +374,12 @@ fn get_command_path(cli: &Cli) -> String {
             InitiativeCommands::Create { .. } => "initiative:create".to_string(),
             InitiativeCommands::Show { .. } => "initiative:show".to_string(),
             InitiativeCommands::List { .. } => "initiative:list".to_string(),
+        },
+        Commands::Workspace(cmd) => match cmd {
+            WorkspaceCommands::List { .. } => "workspace:list".to_string(),
+            WorkspaceCommands::Link { .. } => "workspace:link".to_string(),
+            WorkspaceCommands::Relink { .. } => "workspace:relink".to_string(),
+            WorkspaceCommands::Doctor { .. } => "workspace:doctor".to_string(),
         },
     }
 }
@@ -473,6 +520,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Initiative(cmd) => {
             crate::cli::initiative::run(cmd)?;
+        }
+        Commands::Workspace(cmd) => {
+            crate::cli::workspace::run(cmd)?;
         }
     }
 
