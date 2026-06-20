@@ -162,6 +162,9 @@ pub enum Commands {
 
     #[command(subcommand, about = "Manage shell completions")]
     Completion(CompletionCommands),
+
+    #[command(subcommand, about = "Set up and inspect local context stores")]
+    ContextStore(ContextStoreCommands),
 }
 
 #[derive(Subcommand, Debug)]
@@ -206,6 +209,58 @@ pub enum CompletionCommands {
     },
 }
 
+#[derive(Subcommand, Debug)]
+pub enum ContextStoreCommands {
+    #[command(about = "Create and register a local context store")]
+    Setup {
+        #[arg(help = "Context store id")]
+        id: Option<String>,
+        #[arg(long, help = "Context store folder path; defaults to OpenSpec managed local data")]
+        path: Option<String>,
+        #[arg(long = "init-git", help = "Initialize a Git repository in the context store")]
+        init_git: bool,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Register an existing local context store")]
+    Register {
+        #[arg(help = "Context store folder path")]
+        path: Option<String>,
+        #[arg(long, help = "Context store id; defaults to metadata or folder name")]
+        id: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Forget a local context-store registration without deleting files")]
+    Unregister {
+        #[arg(help = "Context store id")]
+        id: String,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Forget a local context-store registration and delete its local folder")]
+    Remove {
+        #[arg(help = "Context store id")]
+        id: String,
+        #[arg(long, help = "Confirm local context-store folder deletion")]
+        yes: bool,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "List locally registered context stores")]
+    List {
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Check local context-store registration and metadata")]
+    Doctor {
+        #[arg(help = "Context store id")]
+        id: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+}
+
 fn get_command_path(cli: &Cli) -> String {
     match &cli.command {
         Commands::Init { .. } => "init".to_string(),
@@ -223,6 +278,14 @@ fn get_command_path(cli: &Cli) -> String {
             CompletionCommands::Generate { .. } => "completion:generate".to_string(),
             CompletionCommands::Install { .. } => "completion:install".to_string(),
             CompletionCommands::Uninstall { .. } => "completion:uninstall".to_string(),
+        },
+        Commands::ContextStore(cmd) => match cmd {
+            ContextStoreCommands::Setup { .. } => "context-store:setup".to_string(),
+            ContextStoreCommands::Register { .. } => "context-store:register".to_string(),
+            ContextStoreCommands::Unregister { .. } => "context-store:unregister".to_string(),
+            ContextStoreCommands::Remove { .. } => "context-store:remove".to_string(),
+            ContextStoreCommands::List { .. } => "context-store:list".to_string(),
+            ContextStoreCommands::Doctor { .. } => "context-store:doctor".to_string(),
         },
     }
 }
@@ -358,6 +421,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 crate::cli::completion::run_completion_uninstall(shell.as_deref(), _yes)?;
             }
         },
+        Commands::ContextStore(cmd) => {
+            crate::cli::context_store::run(cmd)?;
+        }
     }
 
     // Telemetry: flush pending events before exit

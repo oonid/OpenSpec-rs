@@ -2,6 +2,7 @@ mod archive;
 mod args;
 mod completion;
 mod config;
+mod context_store;
 mod init;
 mod instructions;
 mod list;
