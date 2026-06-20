@@ -66,6 +66,7 @@ pub use skills::{
 };
 
 pub use commands_support::{
-    add_workspace_link, infer_link_name, resolve_existing_directory, resolve_selected_workspace,
-    update_workspace_link, SelectedWorkspace, WorkspaceStatus,
+    add_workspace_link, create_managed_workspace, infer_link_name, parse_setup_links,
+    resolve_existing_directory, resolve_selected_workspace, update_workspace_link,
+    SelectedWorkspace, WorkspaceSetupResult, WorkspaceStatus,
 };

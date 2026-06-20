@@ -342,6 +342,43 @@ pub enum WorkspaceCommands {
         #[arg(long, help = "Output as JSON")]
         json: bool,
     },
+    #[command(about = "Set up a workspace and link existing repos or folders")]
+    Setup {
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long = "link", help = "Repo/folder link: <path> or <name>=<path> (repeatable)")]
+        links: Vec<String>,
+        #[arg(long)]
+        opener: Option<String>,
+        #[arg(long)]
+        tools: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(about = "Refresh workspace-local OpenSpec guidance and agent skills")]
+    Update {
+        #[arg(help = "Workspace name")]
+        name: Option<String>,
+        #[arg(long)]
+        workspace: Option<String>,
+        #[arg(long)]
+        tools: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(about = "Open a workspace in an agent or VS Code editor")]
+    Open {
+        #[arg(help = "Workspace name")]
+        name: Option<String>,
+        #[arg(long)]
+        workspace: Option<String>,
+        #[arg(long)]
+        agent: Option<String>,
+        #[arg(long)]
+        editor: bool,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn get_command_path(cli: &Cli) -> String {
@@ -380,6 +417,9 @@ fn get_command_path(cli: &Cli) -> String {
             WorkspaceCommands::Link { .. } => "workspace:link".to_string(),
             WorkspaceCommands::Relink { .. } => "workspace:relink".to_string(),
             WorkspaceCommands::Doctor { .. } => "workspace:doctor".to_string(),
+            WorkspaceCommands::Setup { .. } => "workspace:setup".to_string(),
+            WorkspaceCommands::Update { .. } => "workspace:update".to_string(),
+            WorkspaceCommands::Open { .. } => "workspace:open".to_string(),
         },
     }
 }

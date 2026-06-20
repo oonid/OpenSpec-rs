@@ -1,7 +1,8 @@
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use super::foundation::validate_workspace_link_name;
+use super::foundation::{validate_workspace_link_name, PreferredOpener, WorkspaceViewState};
 use super::state_io::{find_workspace_root, read_workspace_view_state};
 
 /// A selected workspace, resolved either by name or by finding the current workspace root.
@@ -216,6 +217,137 @@ impl WorkspaceStatus {
     }
 }
 
+/// Result of creating a managed workspace
+#[derive(Debug, Clone)]
+pub struct WorkspaceSetupResult {
+    pub name: String,
+    pub root: PathBuf,
+}
+
+/// Parse workspace link inputs, supporting both `<path>` and `<name>=<path>` forms.
+/// Returns a BTreeMap of link_name -> link_path. Validates for duplicates and empty paths.
+pub fn parse_setup_links(link_inputs: &[String], cwd: &Path) -> Result<BTreeMap<String, String>, String> {
+    let mut links = BTreeMap::new();
+
+    for input in link_inputs {
+        let (name, path_input) = if let Some(eq_pos) = input.find('=') {
+            let name = input[..eq_pos].to_string();
+            let path = input[eq_pos + 1..].to_string();
+            (name, path)
+        } else {
+            // Infer name from the path
+            let path = input.to_string();
+            (String::new(), path)
+        };
+
+        // Validate the link name
+        let link_name = if name.is_empty() {
+            // Infer from path
+            let resolved = resolve_existing_directory(&path_input, cwd)?;
+            infer_link_name(&resolved)
+        } else {
+            validate_workspace_link_name(&name)?;
+            name
+        };
+
+        // Check for duplicates
+        if links.contains_key(&link_name) {
+            return Err(format!("Duplicate link name '{}'.", link_name));
+        }
+
+        // Resolve the directory
+        let resolved = resolve_existing_directory(&path_input, cwd)?;
+        let resolved_str = resolved
+            .to_str()
+            .ok_or_else(|| "Path contains invalid UTF-8".to_string())?
+            .to_string();
+
+        links.insert(link_name, resolved_str);
+    }
+
+    Ok(links)
+}
+
+/// Create a managed workspace with the given name and links.
+/// Creates the workspace directory structure, writes the view state, syncs the open surface,
+/// and registers it in the registry. Returns the workspace name and root path.
+pub fn create_managed_workspace(
+    name: &str,
+    links: BTreeMap<String, String>,
+    preferred_opener: Option<PreferredOpener>,
+    tools: Option<Vec<String>>,
+    gdd: Option<&Path>,
+) -> Result<WorkspaceSetupResult, String> {
+    // Validate the workspace name
+    super::foundation::validate_workspace_name(name)?;
+
+    // Get the managed workspaces directory
+    let managed_ws_dir = super::registry::get_managed_workspaces_dir(gdd);
+    let workspace_root = managed_ws_dir.join(name);
+
+    // Check if workspace already exists
+    if workspace_root.exists() {
+        let root_str = workspace_root
+            .to_str()
+            .unwrap_or("<invalid path>");
+        return Err(format!(
+            "Workspace '{}' already exists at {}.",
+            name, root_str
+        ));
+    }
+
+    // Create the workspace root directory
+    std::fs::create_dir_all(&workspace_root)
+        .map_err(|e| format!("Failed to create workspace directory: {}", e))?;
+
+    // Build the WorkspaceViewState
+    let view_state = WorkspaceViewState {
+        version: 1,
+        name: name.to_string(),
+        context: None,
+        links: {
+            let mut m = BTreeMap::new();
+            for (link_name, link_path) in links {
+                m.insert(link_name, Some(link_path));
+            }
+            m
+        },
+        preferred_opener,
+        tools,
+        workspace_skills: None,
+    };
+
+    // Write the view state
+    super::state_io::write_workspace_view_state(&workspace_root, &view_state)
+        .map_err(|e| format!("Failed to write workspace state: {}", e))?;
+
+    // Sync the open surface
+    super::open_surface::sync_workspace_open_surface(&workspace_root, &view_state, None)
+        .map_err(|e| format!("Failed to sync workspace open surface: {}", e))?;
+
+    // Load the registry and add this workspace
+    let mut registry = super::registry::load_workspace_registry(gdd)
+        .map_err(|e| format!("Failed to load workspace registry: {}", e))?;
+
+    let workspace_root_str = workspace_root
+        .to_str()
+        .ok_or_else(|| "Workspace path contains invalid UTF-8".to_string())?
+        .to_string();
+
+    registry
+        .workspaces
+        .insert(name.to_string(), workspace_root_str);
+
+    // Save the updated registry
+    super::registry::save_workspace_registry(&registry, gdd)
+        .map_err(|e| format!("Failed to save workspace registry: {}", e))?;
+
+    Ok(WorkspaceSetupResult {
+        name: name.to_string(),
+        root: workspace_root,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +463,153 @@ links: {}
         let result = update_workspace_link(&selected, "nonexistent", link_path, ws_root);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Unknown workspace link"));
+    }
+
+    #[test]
+    fn test_parse_setup_links_single_path() {
+        let tmpdir = TempDir::new().expect("failed to create tempdir");
+        let link_dir = tmpdir.path().join("myrepo");
+        std::fs::create_dir(&link_dir).expect("failed to create link dir");
+        let cwd = tmpdir.path();
+
+        let inputs = vec!["myrepo".to_string()];
+        let result = parse_setup_links(&inputs, cwd);
+
+        assert!(result.is_ok());
+        let links = result.unwrap();
+        assert_eq!(links.len(), 1);
+        assert!(links.contains_key("myrepo"));
+    }
+
+    #[test]
+    fn test_parse_setup_links_named_path() {
+        let tmpdir = TempDir::new().expect("failed to create tempdir");
+        let link_dir = tmpdir.path().join("somepath");
+        std::fs::create_dir(&link_dir).expect("failed to create link dir");
+        let cwd = tmpdir.path();
+
+        let inputs = vec!["mylink=somepath".to_string()];
+        let result = parse_setup_links(&inputs, cwd);
+
+        assert!(result.is_ok());
+        let links = result.unwrap();
+        assert_eq!(links.len(), 1);
+        assert!(links.contains_key("mylink"));
+    }
+
+    #[test]
+    fn test_parse_setup_links_duplicate_error() {
+        let tmpdir = TempDir::new().expect("failed to create tempdir");
+        let link_dir1 = tmpdir.path().join("path1");
+        let link_dir2 = tmpdir.path().join("path2");
+        std::fs::create_dir(&link_dir1).expect("failed to create link dir 1");
+        std::fs::create_dir(&link_dir2).expect("failed to create link dir 2");
+        let cwd = tmpdir.path();
+
+        let inputs = vec!["mylink=path1".to_string(), "mylink=path2".to_string()];
+        let result = parse_setup_links(&inputs, cwd);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Duplicate link name"));
+    }
+
+    #[test]
+    fn test_parse_setup_links_nonexistent_error() {
+        let tmpdir = TempDir::new().expect("failed to create tempdir");
+        let cwd = tmpdir.path();
+
+        let inputs = vec!["nonexistent".to_string()];
+        let result = parse_setup_links(&inputs, cwd);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not an existing folder"));
+    }
+
+    #[test]
+    fn test_create_managed_workspace() {
+        let tmpdir = TempDir::new().expect("failed to create tempdir");
+        let gdd = tmpdir.path();
+
+        // Create a directory to link
+        let link_dir = tmpdir.path().join("myrepo");
+        std::fs::create_dir(&link_dir).expect("failed to create link dir");
+
+        let mut links = BTreeMap::new();
+        links.insert(
+            "repo".to_string(),
+            link_dir.to_str().unwrap().to_string(),
+        );
+
+        let result = create_managed_workspace("test-ws", links, None, None, Some(gdd));
+
+        assert!(result.is_ok());
+        let setup_result = result.unwrap();
+        assert_eq!(setup_result.name, "test-ws");
+        assert!(setup_result.root.exists());
+
+        // Verify workspace structure
+        let view_path = super::super::foundation::get_workspace_view_state_path(&setup_result.root);
+        assert!(view_path.exists());
+
+        // Verify registry entry
+        let registry = super::super::registry::load_workspace_registry(Some(gdd))
+            .expect("failed to load registry");
+        assert!(registry.workspaces.contains_key("test-ws"));
+    }
+
+    #[test]
+    fn test_create_managed_workspace_invalid_name() {
+        let tmpdir = TempDir::new().expect("failed to create tempdir");
+        let gdd = tmpdir.path();
+
+        let links = BTreeMap::new();
+
+        // Try with invalid workspace name (contains uppercase)
+        let result = create_managed_workspace("Invalid-Name", links.clone(), None, None, Some(gdd));
+        assert!(result.is_err());
+
+        // Try with empty name
+        let result = create_managed_workspace("", links, None, None, Some(gdd));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_managed_workspace_with_tools() {
+        let tmpdir = TempDir::new().expect("failed to create tempdir");
+        let gdd = tmpdir.path();
+
+        let links = BTreeMap::new();
+        let tools = Some(vec!["claude".to_string(), "cursor".to_string()]);
+
+        let result = create_managed_workspace("ws-with-tools", links, None, tools, Some(gdd));
+
+        assert!(result.is_ok());
+        let setup_result = result.unwrap();
+
+        // Verify tools were written
+        let view_state = super::super::state_io::read_workspace_view_state(&setup_result.root)
+            .expect("failed to read view state");
+        assert!(view_state.tools.is_some());
+        assert_eq!(view_state.tools.unwrap(), vec!["claude", "cursor"]);
+    }
+
+    #[test]
+    fn test_parse_setup_links_multiple_mixed() {
+        let tmpdir = TempDir::new().expect("failed to create tempdir");
+        let repo1 = tmpdir.path().join("repo1");
+        let repo2 = tmpdir.path().join("repo2");
+        std::fs::create_dir(&repo1).expect("failed to create repo1");
+        std::fs::create_dir(&repo2).expect("failed to create repo2");
+        let cwd = tmpdir.path();
+
+        // Mix of simple paths and named paths
+        let inputs = vec!["repo1".to_string(), "alias=repo2".to_string()];
+        let result = parse_setup_links(&inputs, cwd);
+
+        assert!(result.is_ok());
+        let links = result.unwrap();
+        assert_eq!(links.len(), 2);
+        assert!(links.contains_key("repo1"));
+        assert!(links.contains_key("alias"));
     }
 }
