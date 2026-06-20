@@ -4,6 +4,7 @@ mod completion;
 mod config;
 mod context_store;
 mod init;
+mod initiative;
 mod instructions;
 mod list;
 mod new_change;

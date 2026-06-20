@@ -1,6 +1,7 @@
 pub mod schema;
 pub mod templates;
 pub mod operations;
+pub mod resolution;
 
 pub use schema::{
     InitiativeStatus, InitiativeState, INITIATIVE_COLLECTION_ID, INITIATIVE_FILE_NAME,
@@ -17,4 +18,8 @@ pub use templates::{
 
 pub use operations::{
     initiatives_dir, create_initiative, read_initiative, list_initiatives, CreateInitiativeInput,
+};
+
+pub use resolution::{
+    SelectedStore, registered_stores, resolve_selected_store, find_initiative_across_stores,
 };

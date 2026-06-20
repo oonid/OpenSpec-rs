@@ -165,6 +165,9 @@ pub enum Commands {
 
     #[command(subcommand, about = "Set up and inspect local context stores")]
     ContextStore(ContextStoreCommands),
+
+    #[command(subcommand, about = "Create and inspect coordinated initiatives")]
+    Initiative(InitiativeCommands),
 }
 
 #[derive(Subcommand, Debug)]
@@ -261,6 +264,45 @@ pub enum ContextStoreCommands {
     },
 }
 
+#[derive(Subcommand, Debug)]
+pub enum InitiativeCommands {
+    #[command(about = "Create an initiative in a context store")]
+    Create {
+        #[arg(help = "Initiative id")]
+        id: Option<String>,
+        #[arg(long, help = "Initiative title")]
+        title: Option<String>,
+        #[arg(long, help = "Initiative summary")]
+        summary: Option<String>,
+        #[arg(long, help = "Context store id from the local registry")]
+        store: Option<String>,
+        #[arg(long = "store-path", help = "Existing local context store root")]
+        store_path: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Show where an initiative lives and how to read it")]
+    Show {
+        #[arg(help = "Initiative id")]
+        id: String,
+        #[arg(long)]
+        store: Option<String>,
+        #[arg(long = "store-path")]
+        store_path: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(visible_alias = "ls", about = "List initiatives across registered context stores")]
+    List {
+        #[arg(long)]
+        store: Option<String>,
+        #[arg(long = "store-path")]
+        store_path: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 fn get_command_path(cli: &Cli) -> String {
     match &cli.command {
         Commands::Init { .. } => "init".to_string(),
@@ -286,6 +328,11 @@ fn get_command_path(cli: &Cli) -> String {
             ContextStoreCommands::Remove { .. } => "context-store:remove".to_string(),
             ContextStoreCommands::List { .. } => "context-store:list".to_string(),
             ContextStoreCommands::Doctor { .. } => "context-store:doctor".to_string(),
+        },
+        Commands::Initiative(cmd) => match cmd {
+            InitiativeCommands::Create { .. } => "initiative:create".to_string(),
+            InitiativeCommands::Show { .. } => "initiative:show".to_string(),
+            InitiativeCommands::List { .. } => "initiative:list".to_string(),
         },
     }
 }
@@ -423,6 +470,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
         Commands::ContextStore(cmd) => {
             crate::cli::context_store::run(cmd)?;
+        }
+        Commands::Initiative(cmd) => {
+            crate::cli::initiative::run(cmd)?;
         }
     }
 
