@@ -94,6 +94,7 @@ impl Default for ProjectConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GlobalConfig {
     #[serde(default = "default_profile")]
     pub profile: String,
@@ -101,9 +102,11 @@ pub struct GlobalConfig {
     pub delivery: String,
     #[serde(default = "default_workflows")]
     pub workflows: Vec<String>,
-    #[serde(default)]
+    // Serializes as `featureFlags` to match upstream config.json; `feature_flags` alias
+    // keeps reading configs written by earlier Rust versions.
+    #[serde(default, alias = "feature_flags")]
     pub feature_flags: HashMap<String, bool>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub telemetry: Option<TelemetryConfig>,
 }
 
@@ -128,10 +131,17 @@ fn default_workflows() -> Vec<String> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TelemetryConfig {
-    #[serde(default)]
+    // camelCase on disk (`anonymousId`, `noticeSeen`) to match upstream; snake_case aliases
+    // keep reading configs written by earlier Rust versions.
+    #[serde(
+        default,
+        alias = "anonymous_id",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub anonymous_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "notice_seen")]
     pub notice_seen: bool,
 }
 
@@ -249,8 +259,12 @@ impl ConfigManager {
             })?;
         }
 
-        let content = serde_json::to_string_pretty(config)
-            .map_err(|e| OpenSpecError::Custom(format!("JSON serialization error: {}", e)))?;
+        // Trailing newline to match upstream (`JSON.stringify(...) + '\n'`).
+        let content = format!(
+            "{}\n",
+            serde_json::to_string_pretty(config)
+                .map_err(|e| OpenSpecError::Custom(format!("JSON serialization error: {}", e)))?
+        );
 
         std::fs::write(&config_path, content).map_err(|e| OpenSpecError::IoWrite {
             path: config_path.clone(),
@@ -370,5 +384,67 @@ mod dir_resolution_tests {
             fallback,
             home.join("AppData").join("Local").join("openspec")
         );
+    }
+}
+
+#[cfg(test)]
+mod global_config_serde_tests {
+    use super::*;
+
+    #[test]
+    fn global_config_serializes_camelcase_to_match_upstream() {
+        let mut flags = HashMap::new();
+        flags.insert("beta".to_string(), true);
+        let cfg = GlobalConfig {
+            profile: "core".to_string(),
+            delivery: "both".to_string(),
+            workflows: vec!["propose".to_string()],
+            feature_flags: flags,
+            telemetry: Some(TelemetryConfig {
+                anonymous_id: Some("abc".to_string()),
+                notice_seen: true,
+            }),
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("\"featureFlags\""), "{json}");
+        assert!(json.contains("\"anonymousId\""), "{json}");
+        assert!(json.contains("\"noticeSeen\""), "{json}");
+        assert!(!json.contains("feature_flags"));
+        assert!(!json.contains("anonymous_id"));
+    }
+
+    #[test]
+    fn telemetry_omitted_when_none() {
+        let cfg = GlobalConfig {
+            profile: "core".to_string(),
+            delivery: "both".to_string(),
+            workflows: vec![],
+            feature_flags: HashMap::new(),
+            telemetry: None,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(!json.contains("telemetry"), "{json}");
+    }
+
+    #[test]
+    fn reads_camelcase_and_legacy_snake_case() {
+        // Upstream / new Rust camelCase.
+        let camel: GlobalConfig = serde_json::from_str(
+            r#"{"featureFlags":{"beta":true},"telemetry":{"anonymousId":"x","noticeSeen":true}}"#,
+        )
+        .unwrap();
+        assert_eq!(camel.feature_flags.get("beta"), Some(&true));
+        assert_eq!(
+            camel.telemetry.as_ref().unwrap().anonymous_id.as_deref(),
+            Some("x")
+        );
+
+        // Legacy snake_case written by earlier Rust versions still reads.
+        let snake: GlobalConfig = serde_json::from_str(
+            r#"{"feature_flags":{"beta":true},"telemetry":{"anonymous_id":"x","notice_seen":true}}"#,
+        )
+        .unwrap();
+        assert_eq!(snake.feature_flags.get("beta"), Some(&true));
+        assert!(snake.telemetry.as_ref().unwrap().notice_seen);
     }
 }
