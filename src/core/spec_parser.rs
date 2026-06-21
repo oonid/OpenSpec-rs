@@ -148,10 +148,16 @@ impl SpecParser {
         let mut parent_indices: Vec<Option<usize>> = Vec::new();
         let mut stack: Vec<usize> = Vec::new();
 
+        let line_refs: Vec<&str> = self.lines.iter().map(String::as_str).collect();
+        let mask = build_code_fence_mask(&line_refs);
+
         for i in 0..self.lines.len() {
             let line = &self.lines[i];
+            if mask[i] {
+                continue;
+            }
             if let Some((level, title)) = parse_header(line) {
-                let content = self.get_content_until_next_header(i + 1, level);
+                let content = self.get_content_until_next_header(i + 1, level, &mask);
                 let section = Section {
                     level,
                     title: title.clone(),
@@ -216,14 +222,21 @@ impl SpecParser {
         root_sections
     }
 
-    fn get_content_until_next_header(&self, start_line: usize, current_level: usize) -> String {
+    fn get_content_until_next_header(
+        &self,
+        start_line: usize,
+        current_level: usize,
+        mask: &[bool],
+    ) -> String {
         let mut content_lines: Vec<String> = Vec::new();
 
-        for i in start_line..self.lines.len() {
-            let line = &self.lines[i];
-            if let Some((level, _)) = parse_header(line) {
-                if level <= current_level {
-                    break;
+        for (line, &masked) in self.lines[start_line..].iter().zip(&mask[start_line..]) {
+            // A fenced header line must not terminate the section.
+            if !masked {
+                if let Some((level, _)) = parse_header(line) {
+                    if level <= current_level {
+                        break;
+                    }
                 }
             }
             content_lines.push(line.clone());
@@ -295,6 +308,44 @@ fn parse_header(line: &str) -> Option<(usize, String)> {
     None
 }
 
+/// Returns a per-line mask where `true` means the line is part of a fenced code block
+/// (the opening fence line, the closing fence line, and everything between).
+/// Mirrors upstream MarkdownParser.buildCodeFenceMask.
+///
+/// Note: the line-based parsing helpers below compute this mask locally over the
+/// substring they receive (e.g. a section body). Well-formed specs keep code fences
+/// fully contained within a single section, so a local mask is sufficient.
+pub(crate) fn build_code_fence_mask(lines: &[&str]) -> Vec<bool> {
+    // (marker_char, marker_length) of the currently open fence, if any.
+    let open_re = regex::Regex::new(r"^\s*(`{3,}|~{3,})").unwrap();
+    let close_re = regex::Regex::new(r"^\s*(`{3,}|~{3,})\s*$").unwrap();
+
+    let mut mask = vec![false; lines.len()];
+    let mut active_fence: Option<(char, usize)> = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        if active_fence.is_none() {
+            if let Some(caps) = open_re.captures(line) {
+                let marker = &caps[1];
+                active_fence = Some((marker.chars().next().unwrap(), marker.len()));
+                mask[i] = true;
+            }
+            continue;
+        }
+
+        mask[i] = true;
+        let (marker, length) = active_fence.unwrap();
+        if let Some(caps) = close_re.captures(line) {
+            let closing = &caps[1];
+            if closing.chars().next().unwrap() == marker && closing.len() >= length {
+                active_fence = None;
+            }
+        }
+    }
+
+    mask
+}
+
 pub fn parse_delta_spec(content: &str) -> DeltaPlan {
     let normalized = content.replace("\r\n", "\n").replace('\r', "\n");
     let sections = split_top_level_sections(&normalized);
@@ -325,10 +376,14 @@ pub fn parse_delta_spec(content: &str) -> DeltaPlan {
 
 fn split_top_level_sections(content: &str) -> HashMap<String, String> {
     let lines: Vec<&str> = content.lines().collect();
+    let mask = build_code_fence_mask(&lines);
     let mut result: HashMap<String, String> = HashMap::new();
     let mut indices: Vec<(String, usize)> = Vec::new();
 
     for (i, line) in lines.iter().enumerate() {
+        if mask[i] {
+            continue;
+        }
         if let Some((2, title)) = parse_header(line) {
             indices.push((title, i));
         }
@@ -380,13 +435,18 @@ fn parse_requirement_blocks_from_section(section_body: &str) -> Vec<RequirementB
     }
 
     let lines: Vec<&str> = section_body.lines().collect();
+    // Mask computed locally over this section body; fenced headers are not requirements.
+    let mask = build_code_fence_mask(&lines);
     let mut blocks: Vec<RequirementBlock> = Vec::new();
     let mut i = 0;
 
     let re = regex::Regex::new(REQUIREMENT_HEADER_REGEX).unwrap();
+    // A requirement header / section boundary only counts when outside a code fence.
+    let is_req_header = |idx: usize| re.is_match(lines[idx]) && !mask[idx];
+    let is_section_boundary = |idx: usize| lines[idx].trim().starts_with("## ") && !mask[idx];
 
     while i < lines.len() {
-        while i < lines.len() && !re.is_match(lines[i]) {
+        while i < lines.len() && !is_req_header(i) {
             i += 1;
         }
         if i >= lines.len() {
@@ -400,7 +460,7 @@ fn parse_requirement_blocks_from_section(section_body: &str) -> Vec<RequirementB
         let mut buf: Vec<&str> = vec![header_line];
         i += 1;
 
-        while i < lines.len() && !re.is_match(lines[i]) && !lines[i].trim().starts_with("## ") {
+        while i < lines.len() && !is_req_header(i) && !is_section_boundary(i) {
             buf.push(lines[i]);
             i += 1;
         }
@@ -481,10 +541,13 @@ pub struct RequirementsSectionParts {
 pub fn extract_requirements_section(content: &str) -> RequirementsSectionParts {
     let normalized = content.replace("\r\n", "\n").replace('\r', "\n");
     let lines: Vec<&str> = normalized.lines().collect();
+    // Mask over the full content; fenced header-looking lines are not real headers.
+    let mask = build_code_fence_mask(&lines);
 
     let req_header_idx = lines
         .iter()
-        .position(|l| l.trim().eq_ignore_ascii_case("## Requirements"));
+        .enumerate()
+        .position(|(i, l)| !mask[i] && l.trim().eq_ignore_ascii_case("## Requirements"));
 
     if req_header_idx.is_none() {
         let before = content.trim_end();
@@ -506,7 +569,7 @@ pub fn extract_requirements_section(content: &str) -> RequirementsSectionParts {
 
     let mut end_idx = lines.len();
     for (i, line) in lines.iter().enumerate().skip(req_header_idx + 1) {
-        if line.trim().starts_with("## ") {
+        if !mask[i] && line.trim().starts_with("## ") {
             end_idx = i;
             break;
         }
@@ -518,15 +581,19 @@ pub fn extract_requirements_section(content: &str) -> RequirementsSectionParts {
         String::new()
     };
 
-    let section_body: Vec<&str> = lines[req_header_idx + 1..end_idx].to_vec();
+    let body_start = req_header_idx + 1;
+    let section_body: Vec<&str> = lines[body_start..end_idx].to_vec();
 
     let (preamble_lines, body_lines) = {
         let mut preamble = Vec::new();
         let mut body = Vec::new();
         let mut in_body = false;
 
-        for line in section_body {
-            if line.trim().to_lowercase().starts_with("### requirement:") {
+        for (offset, line) in section_body.into_iter().enumerate() {
+            // A fenced `### Requirement:` must not flip into the body.
+            if !mask[body_start + offset]
+                && line.trim().to_lowercase().starts_with("### requirement:")
+            {
                 in_body = true;
             }
             if in_body {
@@ -559,10 +626,14 @@ pub fn extract_requirements_section(content: &str) -> RequirementsSectionParts {
 fn parse_requirement_blocks_from_lines(lines: &[&str]) -> Vec<RequirementBlock> {
     let mut blocks: Vec<RequirementBlock> = Vec::new();
     let re = regex::Regex::new(REQUIREMENT_HEADER_REGEX).unwrap();
+    // Mask computed locally over these lines; fenced headers are not requirements.
+    let mask = build_code_fence_mask(lines);
+    let is_req_header = |idx: usize| re.is_match(lines[idx]) && !mask[idx];
+    let is_section_boundary = |idx: usize| lines[idx].trim().starts_with("## ") && !mask[idx];
     let mut i = 0;
 
     while i < lines.len() {
-        while i < lines.len() && !re.is_match(lines[i]) {
+        while i < lines.len() && !is_req_header(i) {
             i += 1;
         }
         if i >= lines.len() {
@@ -576,7 +647,7 @@ fn parse_requirement_blocks_from_lines(lines: &[&str]) -> Vec<RequirementBlock> 
         let mut buf: Vec<&str> = vec![header_line];
         i += 1;
 
-        while i < lines.len() && !re.is_match(lines[i]) && !lines[i].trim().starts_with("## ") {
+        while i < lines.len() && !is_req_header(i) && !is_section_boundary(i) {
             buf.push(lines[i]);
             i += 1;
         }
@@ -2008,10 +2079,10 @@ The system SHALL do something.
     }
 
     #[test]
-    fn test_parse_spec_detects_requirement_inside_code_block() {
-        // The line-based parser intentionally detects requirement headers even when nested
-        // inside a fenced code block, so requirements "hidden" in code fences are not silently
-        // dropped during validation (upstream #995).
+    fn test_parse_spec_ignores_requirement_inside_code_block() {
+        // Requirement/scenario headers inside a fenced code block are examples, not real
+        // headers. The parser mirrors upstream MarkdownParser.buildCodeFenceMask and ignores
+        // them, so a fenced `### Requirement:` produces zero requirements.
         let content = r#"# test-spec Specification
 
 ## Purpose
@@ -2020,11 +2091,43 @@ This is the purpose of the spec.
 ## Requirements
 ```md
 ### Requirement: Hidden In Fence
-The system SHALL still be detected.
+The system SHALL NOT be detected.
 
-#### Scenario: Detected
+#### Scenario: Ignored
 - **WHEN** a requirement is nested in a code block
-- **THEN** the parser still finds it
+- **THEN** the parser ignores it
+```
+"#;
+
+        let mut parser = SpecParser::new(content);
+        let spec = parser.parse_spec("test-spec").unwrap();
+
+        assert_eq!(spec.requirements.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_spec_counts_only_real_requirements_with_fenced_example() {
+        // A real requirement followed by a fenced example: only the real one is counted.
+        let content = r#"# test-spec Specification
+
+## Purpose
+This is the purpose of the spec.
+
+## Requirements
+### Requirement: Real Requirement
+The system SHALL do something.
+
+#### Scenario: Works
+- **WHEN** invoked
+- **THEN** it works
+
+```md
+### Requirement: Fenced Example
+This is documentation showing how to write a requirement.
+
+#### Scenario: Example Only
+- **WHEN** shown in docs
+- **THEN** it is not a real requirement
 ```
 "#;
 
@@ -2032,10 +2135,7 @@ The system SHALL still be detected.
         let spec = parser.parse_spec("test-spec").unwrap();
 
         assert_eq!(spec.requirements.len(), 1);
-        assert_eq!(
-            spec.requirements[0].text,
-            "The system SHALL still be detected."
-        );
+        assert_eq!(spec.requirements[0].text, "The system SHALL do something.");
         assert_eq!(spec.requirements[0].scenarios.len(), 1);
     }
 

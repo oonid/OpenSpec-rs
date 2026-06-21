@@ -1,6 +1,8 @@
 use crate::core::config::OPENSPEC_DIR_NAME;
 use crate::core::error::{OpenSpecError, Result};
-use crate::core::spec_parser::{parse_delta_spec, RequirementBlock, SpecParser};
+use crate::core::spec_parser::{
+    build_code_fence_mask, parse_delta_spec, RequirementBlock, SpecParser,
+};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ValidationIssue {
@@ -685,9 +687,14 @@ fn requirement_body(req: &RequirementBlock) -> &str {
 }
 
 fn count_scenarios(block_raw: &str) -> usize {
-    block_raw
-        .lines()
-        .filter(|line| line.trim().starts_with("#### "))
+    // Mask computed locally over the block text; scenario headers inside a fenced
+    // code block are examples, not real scenarios, and must not be counted.
+    let lines: Vec<&str> = block_raw.lines().collect();
+    let mask = build_code_fence_mask(&lines);
+    lines
+        .iter()
+        .enumerate()
+        .filter(|(i, line)| !mask[*i] && line.trim().starts_with("#### "))
         .count()
 }
 
