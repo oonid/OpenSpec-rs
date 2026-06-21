@@ -130,6 +130,18 @@ impl SpecParser {
         })
     }
 
+    /// Parse the requirements declared under a named delta section
+    /// (e.g. "ADDED Requirements", "MODIFIED Requirements", "REMOVED Requirements").
+    /// Returns the parsed `Requirement` objects (text + scenarios) for that section,
+    /// mirroring upstream ChangeParser.parseSpecDeltas which feeds parseRequirements.
+    pub fn parse_delta_section_requirements(&self, section_title: &str) -> Vec<Requirement> {
+        let sections = self.parse_sections();
+        match self.find_section(&sections, section_title) {
+            Some(section) => self.parse_requirements(section),
+            None => Vec::new(),
+        }
+    }
+
     fn find_section<'a>(&self, sections: &'a [Section], title: &str) -> Option<&'a Section> {
         let target = title.to_lowercase();
         for section in sections {
