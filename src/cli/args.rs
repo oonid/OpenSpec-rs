@@ -207,6 +207,33 @@ pub enum SchemaCommands {
         #[arg(long, help = "Output as JSON")]
         json: bool,
     },
+
+    #[command(about = "Copy an existing schema to project for customization")]
+    Fork {
+        #[arg(help = "Source schema to copy")]
+        source: String,
+
+        #[arg(help = "Destination schema name (defaults to <source>-custom)")]
+        name: Option<String>,
+
+        #[arg(long, help = "Overwrite existing destination")]
+        force: bool,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+
+    #[command(about = "Create a new project-local schema")]
+    Init {
+        #[arg(help = "Schema name")]
+        name: String,
+
+        #[arg(long, help = "Overwrite existing schema")]
+        force: bool,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -478,6 +505,8 @@ fn get_command_path(cli: &Cli) -> String {
         Commands::Schema(cmd) => match cmd {
             SchemaCommands::Which { .. } => "schema:which".to_string(),
             SchemaCommands::Validate { .. } => "schema:validate".to_string(),
+            SchemaCommands::Fork { .. } => "schema:fork".to_string(),
+            SchemaCommands::Init { .. } => "schema:init".to_string(),
         },
     }
 }
