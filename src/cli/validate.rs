@@ -655,8 +655,18 @@ fn validate_spec(spec_path: &std::path::Path, strict: bool) -> Result<Validation
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let mut parser = SpecParser::new(&content);
-    match parser.parse_spec(&spec_name) {
+    issues.extend(collect_spec_issues(&content, &spec_name));
+
+    Ok(finalize_report(issues, strict))
+}
+
+/// Validate a main spec from its raw content, mirroring upstream SpecSchema/base.schema.ts.
+/// Returns the collected issues (ERRORs for the normative rules, a WARNING for a brief purpose).
+/// Shared by the `validate` command and the archive post-merge re-validation.
+pub(crate) fn collect_spec_issues(content: &str, spec_name: &str) -> Vec<ValidationIssue> {
+    let mut issues: Vec<ValidationIssue> = Vec::new();
+    let mut parser = SpecParser::new(content);
+    match parser.parse_spec(spec_name) {
         Ok(spec) => {
             if spec.overview.len() < 10 {
                 issues.push(ValidationIssue {
@@ -710,8 +720,7 @@ fn validate_spec(spec_path: &std::path::Path, strict: bool) -> Result<Validation
             });
         }
     }
-
-    Ok(finalize_report(issues, strict))
+    issues
 }
 
 fn print_report(name: &str, item_type: &str, report: &ValidationReport) {
