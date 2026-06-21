@@ -91,6 +91,15 @@ pub enum Commands {
         json: bool,
     },
 
+    #[command(about = "Show resolved template paths for all artifacts in a schema")]
+    Templates {
+        #[arg(long, help = "Schema to use (default: spec-driven)")]
+        schema: Option<String>,
+
+        #[arg(long, help = "Output as JSON mapping artifact IDs to template paths")]
+        json: bool,
+    },
+
     #[command(about = "Show a change or spec")]
     Show {
         #[arg(help = "Item name to show")]
@@ -171,6 +180,33 @@ pub enum Commands {
 
     #[command(subcommand, about = "Set up and inspect coordination workspaces")]
     Workspace(WorkspaceCommands),
+
+    #[command(subcommand, about = "Manage workflow schemas [experimental]")]
+    Schema(SchemaCommands),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SchemaCommands {
+    #[command(about = "Show where a schema resolves from")]
+    Which {
+        #[arg(help = "Schema name")]
+        name: Option<String>,
+
+        #[arg(long, help = "List all schemas with their resolution sources")]
+        all: bool,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+
+    #[command(about = "Validate a schema structure and templates")]
+    Validate {
+        #[arg(help = "Schema name (default: spec-driven)")]
+        name: Option<String>,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -406,6 +442,7 @@ fn get_command_path(cli: &Cli) -> String {
         Commands::Status { .. } => "status".to_string(),
         Commands::Instructions { .. } => "instructions".to_string(),
         Commands::Schemas { .. } => "schemas".to_string(),
+        Commands::Templates { .. } => "templates".to_string(),
         Commands::Show { .. } => "show".to_string(),
         Commands::Validate { .. } => "validate".to_string(),
         Commands::Archive { .. } => "archive".to_string(),
@@ -437,6 +474,10 @@ fn get_command_path(cli: &Cli) -> String {
             WorkspaceCommands::Setup { .. } => "workspace:setup".to_string(),
             WorkspaceCommands::Update { .. } => "workspace:update".to_string(),
             WorkspaceCommands::Open { .. } => "workspace:open".to_string(),
+        },
+        Commands::Schema(cmd) => match cmd {
+            SchemaCommands::Which { .. } => "schema:which".to_string(),
+            SchemaCommands::Validate { .. } => "schema:validate".to_string(),
         },
     }
 }
@@ -506,6 +547,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Schemas { json } => {
             crate::cli::schemas::run_schemas(json)?;
+        }
+        Commands::Templates { schema, json } => {
+            crate::cli::templates::run(schema.as_deref(), json)?;
         }
         Commands::Show {
             name,
@@ -580,6 +624,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Workspace(cmd) => {
             crate::cli::workspace::run(cmd)?;
+        }
+        Commands::Schema(cmd) => {
+            crate::cli::schema::run(cmd)?;
         }
     }
 
