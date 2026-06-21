@@ -6,7 +6,7 @@ Optional anonymous telemetry for OpenSpec. Collects usage statistics to improve 
 
 ### Requirement: Anonymous Usage Tracking
 
-The system MAY collect anonymous usage statistics when telemetry is enabled.
+The system MAY collect anonymous usage statistics when telemetry is enabled, and SHALL NOT collect any data when telemetry is disabled.
 
 #### Scenario: Track command execution
 - **WHEN** user runs any openspec command

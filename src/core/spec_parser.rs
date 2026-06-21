@@ -948,7 +948,7 @@ pub fn merge_delta_plan(
     Ok(MergeResult { rebuilt, counts })
 }
 
-fn normalize_requirement_name(name: &str) -> String {
+pub fn normalize_requirement_name(name: &str) -> String {
     name.trim().to_string()
 }
 
