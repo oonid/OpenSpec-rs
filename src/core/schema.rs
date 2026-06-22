@@ -39,10 +39,18 @@ pub struct SchemaYaml {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InitiativeLink {
+    pub store: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChangeMetadata {
     pub schema: String,
     #[serde(default)]
     pub created: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initiative: Option<InitiativeLink>,
 }
 
 #[derive(Debug, Clone)]
@@ -646,6 +654,49 @@ artifacts:
         let names = list_schema_names(None);
         assert!(!names.is_empty());
         assert!(names.contains(&"spec-driven".to_string()));
+    }
+
+    #[test]
+    fn test_change_metadata_roundtrip_without_initiative() {
+        let yaml = "schema: spec-driven\ncreated: 2026-01-01\n";
+        let meta: ChangeMetadata = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(meta.schema, "spec-driven");
+        assert_eq!(meta.created.as_deref(), Some("2026-01-01"));
+        assert!(meta.initiative.is_none());
+
+        // Serializing back should NOT emit an `initiative` key.
+        let serialized = serde_yaml::to_string(&meta).unwrap();
+        assert!(!serialized.contains("initiative"));
+        let reparsed: ChangeMetadata = serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(reparsed, meta);
+    }
+
+    #[test]
+    fn test_change_metadata_roundtrip_with_initiative() {
+        let meta = ChangeMetadata {
+            schema: "spec-driven".to_string(),
+            created: Some("2026-01-01".to_string()),
+            initiative: Some(InitiativeLink {
+                store: "team".to_string(),
+                id: "roadmap".to_string(),
+            }),
+        };
+        let serialized = serde_yaml::to_string(&meta).unwrap();
+        let reparsed: ChangeMetadata = serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(reparsed, meta);
+        let link = reparsed.initiative.unwrap();
+        assert_eq!(link.store, "team");
+        assert_eq!(link.id, "roadmap");
+    }
+
+    #[test]
+    fn test_change_metadata_legacy_schema_only_deserializes() {
+        // Existing on-disk files that only have `schema` must still parse.
+        let yaml = "schema: spec-driven\n";
+        let meta: ChangeMetadata = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(meta.schema, "spec-driven");
+        assert!(meta.created.is_none());
+        assert!(meta.initiative.is_none());
     }
 
     #[test]

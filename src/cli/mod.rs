@@ -10,6 +10,7 @@ mod list;
 mod new_change;
 mod schema;
 mod schemas;
+mod set;
 mod show;
 mod status;
 mod templates;

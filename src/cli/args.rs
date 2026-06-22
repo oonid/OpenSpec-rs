@@ -183,6 +183,30 @@ pub enum Commands {
 
     #[command(subcommand, about = "Manage workflow schemas [experimental]")]
     Schema(SchemaCommands),
+
+    #[command(subcommand, about = "Set checked-in OpenSpec metadata")]
+    Set(SetCommands),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SetCommands {
+    #[command(about = "Link a change to an initiative")]
+    Change {
+        #[arg(help = "Change name")]
+        name: Option<String>,
+
+        #[arg(long, help = "Initiative id to link")]
+        initiative: Option<String>,
+
+        #[arg(long, help = "Context store id from the local registry")]
+        store: Option<String>,
+
+        #[arg(long = "store-path", help = "Existing local context store root")]
+        store_path: Option<String>,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -508,6 +532,9 @@ fn get_command_path(cli: &Cli) -> String {
             SchemaCommands::Fork { .. } => "schema:fork".to_string(),
             SchemaCommands::Init { .. } => "schema:init".to_string(),
         },
+        Commands::Set(cmd) => match cmd {
+            SetCommands::Change { .. } => "set:change".to_string(),
+        },
     }
 }
 
@@ -656,6 +683,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Schema(cmd) => {
             crate::cli::schema::run(cmd)?;
+        }
+        Commands::Set(cmd) => {
+            crate::cli::set::run(cmd)?;
         }
     }
 
