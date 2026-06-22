@@ -121,6 +121,9 @@ AI:  Archived. Specs updated.
 | `context-store` | Set up and inspect local context stores (beta) |
 | `initiative` | Create and inspect coordinated initiatives (beta) |
 | `workspace` | Set up and inspect coordination workspaces (beta) |
+| `templates` | Show resolved template paths for a schema |
+| `schema` | Inspect, validate, fork, or init workflow schemas |
+| `set change` | Link a repo-local change to an initiative |
 
 ## Coordination: Context Stores, Initiatives & Workspaces (beta)
 
