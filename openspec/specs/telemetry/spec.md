@@ -1,9 +1,7 @@
 ## Purpose
 
 Optional anonymous telemetry for OpenSpec. Collects usage statistics to improve the tool with user consent and easy opt-out.
-
 ## Requirements
-
 ### Requirement: Anonymous Usage Tracking
 
 The system MAY collect anonymous usage statistics when telemetry is enabled, and SHALL NOT collect any data when telemetry is disabled.
@@ -46,3 +44,16 @@ The system SHALL send telemetry asynchronously to avoid blocking CLI operations.
 - **WHEN** system sends telemetry
 - **THEN** command execution is not delayed
 - **AND** telemetry failures do not affect command results
+
+### Requirement: Resilient Telemetry Delivery
+
+The system SHALL fail silently when telemetry delivery is blocked, so that firewalled or offline environments never surface network errors to the user.
+
+#### Scenario: Network blocked by firewall
+- **WHEN** telemetry is enabled but the analytics endpoint is unreachable or blocked
+- **THEN** system swallows the network error without printing it
+- **AND** system does not retry indefinitely (delivery uses a short ~1s timeout with retries and remote config disabled)
+
+#### Scenario: No impact on command exit
+- **WHEN** a telemetry send fails
+- **THEN** the command still completes and exits normally
