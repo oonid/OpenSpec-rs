@@ -8,24 +8,61 @@ pub const OPENSPEC_DIR_NAME: &str = "openspec";
 pub const CONFIG_FILE_NAME: &str = "config.yaml";
 pub const GLOBAL_CONFIG_FILE_NAME: &str = "config.json";
 
-pub fn xdg_config_dir() -> PathBuf {
-    if let Some(xdg_config) = std::env::var_os("XDG_CONFIG_HOME") {
-        PathBuf::from(xdg_config).join("openspec")
-    } else if let Some(config_dir) = dirs::config_dir() {
-        config_dir.join("openspec")
-    } else {
-        PathBuf::from(".config").join("openspec")
+fn home_dir() -> PathBuf {
+    dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Resolve a global config/data directory, mirroring upstream `getGlobalConfigDir`/
+/// `getGlobalDataDir` exactly so the Rust binary and the npm CLI share locations:
+/// the `*_HOME` env var wins on all platforms; otherwise Windows uses its env dir
+/// (with an `AppData/...` fallback) and macOS/Linux both use a dotfile path under `$HOME`.
+///
+/// NOTE: unlike the `dirs` crate, macOS uses `~/.config` and `~/.local/share` here (not
+/// `~/Library/Application Support`) — that is intentional, to match upstream.
+fn resolve_global_dir(
+    xdg_override: Option<&std::ffi::OsStr>,
+    win_override: Option<&std::ffi::OsStr>,
+    home: &Path,
+    is_windows: bool,
+    win_fallback: &[&str],
+    unix_fallback: &[&str],
+) -> PathBuf {
+    if let Some(x) = xdg_override {
+        return Path::new(x).join(OPENSPEC_DIR_NAME);
     }
+    if is_windows {
+        if let Some(w) = win_override {
+            return Path::new(w).join(OPENSPEC_DIR_NAME);
+        }
+        let mut p = home.to_path_buf();
+        p.extend(win_fallback);
+        return p.join(OPENSPEC_DIR_NAME);
+    }
+    let mut p = home.to_path_buf();
+    p.extend(unix_fallback);
+    p.join(OPENSPEC_DIR_NAME)
+}
+
+pub fn xdg_config_dir() -> PathBuf {
+    resolve_global_dir(
+        std::env::var_os("XDG_CONFIG_HOME").as_deref(),
+        std::env::var_os("APPDATA").as_deref(),
+        &home_dir(),
+        cfg!(target_os = "windows"),
+        &["AppData", "Roaming"],
+        &[".config"],
+    )
 }
 
 pub fn xdg_data_dir() -> PathBuf {
-    if let Some(xdg_data) = std::env::var_os("XDG_DATA_HOME") {
-        PathBuf::from(xdg_data).join("openspec")
-    } else if let Some(data_dir) = dirs::data_local_dir() {
-        data_dir.join("openspec")
-    } else {
-        PathBuf::from(".local").join("share").join("openspec")
-    }
+    resolve_global_dir(
+        std::env::var_os("XDG_DATA_HOME").as_deref(),
+        std::env::var_os("LOCALAPPDATA").as_deref(),
+        &home_dir(),
+        cfg!(target_os = "windows"),
+        &["AppData", "Local"],
+        &[".local", "share"],
+    )
 }
 
 pub fn xdg_config_path() -> PathBuf {
@@ -57,6 +94,7 @@ impl Default for ProjectConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GlobalConfig {
     #[serde(default = "default_profile")]
     pub profile: String,
@@ -64,9 +102,11 @@ pub struct GlobalConfig {
     pub delivery: String,
     #[serde(default = "default_workflows")]
     pub workflows: Vec<String>,
-    #[serde(default)]
+    // Serializes as `featureFlags` to match upstream config.json; `feature_flags` alias
+    // keeps reading configs written by earlier Rust versions.
+    #[serde(default, alias = "feature_flags")]
     pub feature_flags: HashMap<String, bool>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub telemetry: Option<TelemetryConfig>,
 }
 
@@ -79,19 +119,29 @@ fn default_delivery() -> String {
 }
 
 fn default_workflows() -> Vec<String> {
+    // Matches upstream CORE_WORKFLOWS (profiles.ts): the 'core' profile installs exactly
+    // these five workflows. `verify` and others are not part of core.
     vec![
         "propose".to_string(),
         "explore".to_string(),
         "apply".to_string(),
+        "sync".to_string(),
         "archive".to_string(),
     ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TelemetryConfig {
-    #[serde(default)]
+    // camelCase on disk (`anonymousId`, `noticeSeen`) to match upstream; snake_case aliases
+    // keep reading configs written by earlier Rust versions.
+    #[serde(
+        default,
+        alias = "anonymous_id",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub anonymous_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "notice_seen")]
     pub notice_seen: bool,
 }
 
@@ -209,8 +259,12 @@ impl ConfigManager {
             })?;
         }
 
-        let content = serde_json::to_string_pretty(config)
-            .map_err(|e| OpenSpecError::Custom(format!("JSON serialization error: {}", e)))?;
+        // Trailing newline to match upstream (`JSON.stringify(...) + '\n'`).
+        let content = format!(
+            "{}\n",
+            serde_json::to_string_pretty(config)
+                .map_err(|e| OpenSpecError::Custom(format!("JSON serialization error: {}", e)))?
+        );
 
         std::fs::write(&config_path, content).map_err(|e| OpenSpecError::IoWrite {
             path: config_path.clone(),
@@ -238,5 +292,159 @@ fn find_project_root() -> Option<PathBuf> {
 impl Default for ConfigManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Best-effort, one-time migration for macOS users whose global config lived under the old
+/// `~/Library/Application Support/openspec` location (the `dirs` crate default) before
+/// `xdg_config_dir`/`xdg_data_dir` were aligned with upstream's `~/.config`/`~/.local/share`.
+///
+/// Copies the legacy global config file to its new home if the new one does not exist yet, so
+/// macOS users keep their telemetry preference / anonymous id. No-op on other platforms and
+/// when `XDG_CONFIG_HOME` is set. Non-fatal: any error is ignored.
+pub fn migrate_legacy_macos_global_config() {
+    #[cfg(target_os = "macos")]
+    {
+        if std::env::var_os("XDG_CONFIG_HOME").is_some() {
+            return;
+        }
+        if let Some(legacy_base) = dirs::config_dir() {
+            let legacy_config = legacy_base
+                .join(OPENSPEC_DIR_NAME)
+                .join(GLOBAL_CONFIG_FILE_NAME);
+            let new_config = xdg_config_path();
+            if legacy_config.exists() && !new_config.exists() {
+                if let Some(parent) = new_config.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::copy(&legacy_config, &new_config);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod dir_resolution_tests {
+    use super::*;
+    use std::ffi::OsStr;
+    use std::path::Path;
+
+    #[test]
+    fn xdg_override_wins_on_all_platforms() {
+        let home = Path::new("/home/u");
+        for is_windows in [true, false] {
+            let dir = resolve_global_dir(
+                Some(OsStr::new("/custom/xdg")),
+                Some(OsStr::new("/win/appdata")),
+                home,
+                is_windows,
+                &["AppData", "Roaming"],
+                &[".config"],
+            );
+            assert_eq!(dir, Path::new("/custom/xdg/openspec"));
+        }
+    }
+
+    #[test]
+    fn unix_and_macos_use_dotfile_path() {
+        // is_windows = false covers both Linux and macOS — matches upstream (no Library/... path).
+        let dir = resolve_global_dir(
+            None,
+            None,
+            Path::new("/Users/u"),
+            false,
+            &["AppData", "Local"],
+            &[".local", "share"],
+        );
+        assert_eq!(dir, Path::new("/Users/u/.local/share/openspec"));
+    }
+
+    #[test]
+    fn windows_uses_env_then_fallback() {
+        let home = Path::new("C:\\Users\\u");
+        let with_env = resolve_global_dir(
+            None,
+            Some(OsStr::new("D:\\AppData\\Local")),
+            home,
+            true,
+            &["AppData", "Local"],
+            &[".local", "share"],
+        );
+        assert_eq!(with_env, Path::new("D:\\AppData\\Local").join("openspec"));
+
+        let fallback = resolve_global_dir(
+            None,
+            None,
+            home,
+            true,
+            &["AppData", "Local"],
+            &[".local", "share"],
+        );
+        assert_eq!(
+            fallback,
+            home.join("AppData").join("Local").join("openspec")
+        );
+    }
+}
+
+#[cfg(test)]
+mod global_config_serde_tests {
+    use super::*;
+
+    #[test]
+    fn global_config_serializes_camelcase_to_match_upstream() {
+        let mut flags = HashMap::new();
+        flags.insert("beta".to_string(), true);
+        let cfg = GlobalConfig {
+            profile: "core".to_string(),
+            delivery: "both".to_string(),
+            workflows: vec!["propose".to_string()],
+            feature_flags: flags,
+            telemetry: Some(TelemetryConfig {
+                anonymous_id: Some("abc".to_string()),
+                notice_seen: true,
+            }),
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("\"featureFlags\""), "{json}");
+        assert!(json.contains("\"anonymousId\""), "{json}");
+        assert!(json.contains("\"noticeSeen\""), "{json}");
+        assert!(!json.contains("feature_flags"));
+        assert!(!json.contains("anonymous_id"));
+    }
+
+    #[test]
+    fn telemetry_omitted_when_none() {
+        let cfg = GlobalConfig {
+            profile: "core".to_string(),
+            delivery: "both".to_string(),
+            workflows: vec![],
+            feature_flags: HashMap::new(),
+            telemetry: None,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(!json.contains("telemetry"), "{json}");
+    }
+
+    #[test]
+    fn reads_camelcase_and_legacy_snake_case() {
+        // Upstream / new Rust camelCase.
+        let camel: GlobalConfig = serde_json::from_str(
+            r#"{"featureFlags":{"beta":true},"telemetry":{"anonymousId":"x","noticeSeen":true}}"#,
+        )
+        .unwrap();
+        assert_eq!(camel.feature_flags.get("beta"), Some(&true));
+        assert_eq!(
+            camel.telemetry.as_ref().unwrap().anonymous_id.as_deref(),
+            Some("x")
+        );
+
+        // Legacy snake_case written by earlier Rust versions still reads.
+        let snake: GlobalConfig = serde_json::from_str(
+            r#"{"feature_flags":{"beta":true},"telemetry":{"anonymous_id":"x","notice_seen":true}}"#,
+        )
+        .unwrap();
+        assert_eq!(snake.feature_flags.get("beta"), Some(&true));
+        assert!(snake.telemetry.as_ref().unwrap().notice_seen);
     }
 }

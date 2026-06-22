@@ -12,7 +12,7 @@ This project exists for two reasons:
 
 ## Overview
 
-OpenSpec-rs is a complete Rust port of the OpenSpec CLI. It provides the same functionality with better performance and simpler deployment - a single ~4MB binary with no runtime dependencies.
+OpenSpec-rs is a complete Rust port of the OpenSpec CLI, tracking upstream **v1.4.1**. It provides the same functionality with better performance and simpler deployment - a single ~4MB binary with no runtime dependencies.
 
 ## Features
 
@@ -21,7 +21,9 @@ OpenSpec-rs is a complete Rust port of the OpenSpec CLI. It provides the same fu
 - **Fast** - Native Rust performance
 - **Small Size** - ~4MB binary with LTO optimization
 - **Full CLI** - All OpenSpec commands supported
+- **30 AI Tools** - Skill generation for Claude, Cursor, OpenCode, Copilot, Codex, Gemini, and many more
 - **AI Agent Skills** - Embedded skills for /opsx: commands
+- **Coordination (beta)** - Context stores, initiatives, and multi-repo workspaces for cross-repo planning
 
 ## Installation
 
@@ -116,6 +118,35 @@ AI:  Archived. Specs updated.
 | `update [path]` | Update AI tool instruction files |
 | `config` | View and modify configuration |
 | `completion` | Generate shell completions |
+| `context-store` | Set up and inspect local context stores (beta) |
+| `initiative` | Create and inspect coordinated initiatives (beta) |
+| `workspace` | Set up and inspect coordination workspaces (beta) |
+| `templates` | Show resolved template paths for a schema |
+| `schema` | Inspect, validate, fork, or init workflow schemas |
+| `set change` | Link a repo-local change to an initiative |
+
+## Coordination: Context Stores, Initiatives & Workspaces (beta)
+
+For work that spans multiple repositories, OpenSpec-rs adds three coordination
+primitives (on-disk formats are compatible with the upstream npm CLI):
+
+- **Context stores** — local, git-backed stores that hold cross-repo planning context.
+  ```bash
+  openspec context-store setup team-context
+  openspec context-store list
+  ```
+- **Initiatives** — durable cross-team/cross-repo intent (requirements, design, decisions, tasks) living inside a context store.
+  ```bash
+  openspec initiative create roadmap --title "Q3 Roadmap" --summary "..." --store team-context
+  openspec initiative list
+  ```
+- **Workspaces** — a local working view that links repos/folders and opens them in your agent or editor.
+  ```bash
+  openspec workspace setup --name platform --link ../api --link ../web
+  openspec workspace open platform --editor
+  ```
+
+These are beta; existing single-project workflows are unaffected.
 
 ## Project Structure
 
@@ -124,6 +155,9 @@ OpenSpec-rs/
 ├── src/
 │   ├── cli/           # CLI command implementations
 │   ├── core/          # Core functionality (schema, artifact graph, etc.)
+│   │   ├── context_store/   # Context store registry + operations (beta)
+│   │   ├── collections/     # Initiatives collection (beta)
+│   │   └── workspace/       # Workspace data, openers, skills (beta)
 │   ├── templates/     # Embedded templates for skills and commands
 │   ├── ai_tools/      # AI tool configuration generators
 │   ├── telemetry/     # Optional telemetry (PostHog)
@@ -152,14 +186,17 @@ git submodule update --init --recursive
 
 ## AI Tool Integration
 
-OpenSpec-rs generates configuration files for various AI tools:
+OpenSpec-rs generates skill/command configuration for **30 AI tools**, including:
 
-- **OpenCode** - `.opencode/` directory with skills and commands
-- **Claude** - `.claude/` directory with CLAUDE.md and commands
-- **Cursor** - `.cursor/` directory with rules and commands
-- **Windsurf** - `.windsurf/` directory with rules and commands
+- **Claude Code** - `.claude/`
+- **OpenCode** - `.opencode/`
+- **Cursor** - `.cursor/`
+- **Windsurf** - `.windsurf/`
+- **GitHub Copilot** - `.github/`
+- **Codex**, **Gemini CLI**, **Qwen Code**, **Kiro**, **Kimi CLI**, **Mistral Vibe**, and more
 
-Use `openspec init --tools <tool>` to configure specific tools.
+`openspec init` auto-detects the tools already present in your project; use
+`openspec init --tools <all|none|comma-separated-list>` to choose explicitly.
 
 ## Shell Completions
 
@@ -174,6 +211,12 @@ openspec completion generate zsh > "${fpath[1]}/_openspec"
 
 # Fish
 openspec completion generate fish > ~/.config/fish/completions/openspec.fish
+```
+
+Or install them in one step (opt-in; not installed automatically by `init`/`update`):
+
+```bash
+openspec completion install zsh
 ```
 
 ## Development

@@ -91,6 +91,15 @@ pub enum Commands {
         json: bool,
     },
 
+    #[command(about = "Show resolved template paths for all artifacts in a schema")]
+    Templates {
+        #[arg(long, help = "Schema to use (default: spec-driven)")]
+        schema: Option<String>,
+
+        #[arg(long, help = "Output as JSON mapping artifact IDs to template paths")]
+        json: bool,
+    },
+
     #[command(about = "Show a change or spec")]
     Show {
         #[arg(help = "Item name to show")]
@@ -162,6 +171,93 @@ pub enum Commands {
 
     #[command(subcommand, about = "Manage shell completions")]
     Completion(CompletionCommands),
+
+    #[command(subcommand, about = "Set up and inspect local context stores")]
+    ContextStore(ContextStoreCommands),
+
+    #[command(subcommand, about = "Create and inspect coordinated initiatives")]
+    Initiative(InitiativeCommands),
+
+    #[command(subcommand, about = "Set up and inspect coordination workspaces")]
+    Workspace(WorkspaceCommands),
+
+    #[command(subcommand, about = "Manage workflow schemas [experimental]")]
+    Schema(SchemaCommands),
+
+    #[command(subcommand, about = "Set checked-in OpenSpec metadata")]
+    Set(SetCommands),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SetCommands {
+    #[command(about = "Link a change to an initiative")]
+    Change {
+        #[arg(help = "Change name")]
+        name: Option<String>,
+
+        #[arg(long, help = "Initiative id to link")]
+        initiative: Option<String>,
+
+        #[arg(long, help = "Context store id from the local registry")]
+        store: Option<String>,
+
+        #[arg(long = "store-path", help = "Existing local context store root")]
+        store_path: Option<String>,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SchemaCommands {
+    #[command(about = "Show where a schema resolves from")]
+    Which {
+        #[arg(help = "Schema name")]
+        name: Option<String>,
+
+        #[arg(long, help = "List all schemas with their resolution sources")]
+        all: bool,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+
+    #[command(about = "Validate a schema structure and templates")]
+    Validate {
+        #[arg(help = "Schema name (default: spec-driven)")]
+        name: Option<String>,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+
+    #[command(about = "Copy an existing schema to project for customization")]
+    Fork {
+        #[arg(help = "Source schema to copy")]
+        source: String,
+
+        #[arg(help = "Destination schema name (defaults to <source>-custom)")]
+        name: Option<String>,
+
+        #[arg(long, help = "Overwrite existing destination")]
+        force: bool,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+
+    #[command(about = "Create a new project-local schema")]
+    Init {
+        #[arg(help = "Schema name")]
+        name: String,
+
+        #[arg(long, help = "Overwrite existing schema")]
+        force: bool,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -206,6 +302,189 @@ pub enum CompletionCommands {
     },
 }
 
+#[derive(Subcommand, Debug)]
+pub enum ContextStoreCommands {
+    #[command(about = "Create and register a local context store")]
+    Setup {
+        #[arg(help = "Context store id")]
+        id: Option<String>,
+        #[arg(
+            long,
+            help = "Context store folder path; defaults to OpenSpec managed local data"
+        )]
+        path: Option<String>,
+        #[arg(
+            long = "init-git",
+            help = "Initialize a Git repository in the context store"
+        )]
+        init_git: bool,
+        #[arg(
+            long = "allow-inside-git-repository",
+            help = "Allow the context store path to be inside an existing Git repository"
+        )]
+        allow_inside_git_repository: bool,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Register an existing local context store")]
+    Register {
+        #[arg(help = "Context store folder path")]
+        path: Option<String>,
+        #[arg(long, help = "Context store id; defaults to metadata or folder name")]
+        id: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Forget a local context-store registration without deleting files")]
+    Unregister {
+        #[arg(help = "Context store id")]
+        id: String,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Forget a local context-store registration and delete its local folder")]
+    Remove {
+        #[arg(help = "Context store id")]
+        id: String,
+        #[arg(long, help = "Confirm local context-store folder deletion")]
+        yes: bool,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "List locally registered context stores")]
+    List {
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Check local context-store registration and metadata")]
+    Doctor {
+        #[arg(help = "Context store id")]
+        id: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum InitiativeCommands {
+    #[command(about = "Create an initiative in a context store")]
+    Create {
+        #[arg(help = "Initiative id")]
+        id: Option<String>,
+        #[arg(long, help = "Initiative title")]
+        title: Option<String>,
+        #[arg(long, help = "Initiative summary")]
+        summary: Option<String>,
+        #[arg(long, help = "Context store id from the local registry")]
+        store: Option<String>,
+        #[arg(long = "store-path", help = "Existing local context store root")]
+        store_path: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Show where an initiative lives and how to read it")]
+    Show {
+        #[arg(help = "Initiative id")]
+        id: String,
+        #[arg(long)]
+        store: Option<String>,
+        #[arg(long = "store-path")]
+        store_path: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(
+        visible_alias = "ls",
+        about = "List initiatives across registered context stores"
+    )]
+    List {
+        #[arg(long)]
+        store: Option<String>,
+        #[arg(long = "store-path")]
+        store_path: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum WorkspaceCommands {
+    #[command(visible_alias = "ls", about = "List known OpenSpec workspaces")]
+    List {
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Link an existing repo or folder to a workspace")]
+    Link {
+        #[arg(help = "Link name or path")]
+        name_or_path: Option<String>,
+        #[arg(help = "Path (when first arg is a name)")]
+        path: Option<String>,
+        #[arg(long, help = "Workspace name from known local workspace views")]
+        workspace: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Update the local path for an existing workspace link")]
+    Relink {
+        #[arg(help = "Link name")]
+        name: String,
+        #[arg(help = "New path")]
+        path: String,
+        #[arg(long, help = "Workspace name from known local workspace views")]
+        workspace: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Check what a workspace can resolve on this machine")]
+    Doctor {
+        #[arg(long, help = "Workspace name from known local workspace views")]
+        workspace: Option<String>,
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+    #[command(about = "Set up a workspace and link existing repos or folders")]
+    Setup {
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(
+            long = "link",
+            help = "Repo/folder link: <path> or <name>=<path> (repeatable)"
+        )]
+        links: Vec<String>,
+        #[arg(long)]
+        opener: Option<String>,
+        #[arg(long)]
+        tools: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(about = "Refresh workspace-local OpenSpec guidance and agent skills")]
+    Update {
+        #[arg(help = "Workspace name")]
+        name: Option<String>,
+        #[arg(long)]
+        workspace: Option<String>,
+        #[arg(long)]
+        tools: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(about = "Open a workspace in an agent or VS Code editor")]
+    Open {
+        #[arg(help = "Workspace name")]
+        name: Option<String>,
+        #[arg(long)]
+        workspace: Option<String>,
+        #[arg(long)]
+        agent: Option<String>,
+        #[arg(long)]
+        editor: bool,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 fn get_command_path(cli: &Cli) -> String {
     match &cli.command {
         Commands::Init { .. } => "init".to_string(),
@@ -214,6 +493,7 @@ fn get_command_path(cli: &Cli) -> String {
         Commands::Status { .. } => "status".to_string(),
         Commands::Instructions { .. } => "instructions".to_string(),
         Commands::Schemas { .. } => "schemas".to_string(),
+        Commands::Templates { .. } => "templates".to_string(),
         Commands::Show { .. } => "show".to_string(),
         Commands::Validate { .. } => "validate".to_string(),
         Commands::Archive { .. } => "archive".to_string(),
@@ -223,6 +503,37 @@ fn get_command_path(cli: &Cli) -> String {
             CompletionCommands::Generate { .. } => "completion:generate".to_string(),
             CompletionCommands::Install { .. } => "completion:install".to_string(),
             CompletionCommands::Uninstall { .. } => "completion:uninstall".to_string(),
+        },
+        Commands::ContextStore(cmd) => match cmd {
+            ContextStoreCommands::Setup { .. } => "context-store:setup".to_string(),
+            ContextStoreCommands::Register { .. } => "context-store:register".to_string(),
+            ContextStoreCommands::Unregister { .. } => "context-store:unregister".to_string(),
+            ContextStoreCommands::Remove { .. } => "context-store:remove".to_string(),
+            ContextStoreCommands::List { .. } => "context-store:list".to_string(),
+            ContextStoreCommands::Doctor { .. } => "context-store:doctor".to_string(),
+        },
+        Commands::Initiative(cmd) => match cmd {
+            InitiativeCommands::Create { .. } => "initiative:create".to_string(),
+            InitiativeCommands::Show { .. } => "initiative:show".to_string(),
+            InitiativeCommands::List { .. } => "initiative:list".to_string(),
+        },
+        Commands::Workspace(cmd) => match cmd {
+            WorkspaceCommands::List { .. } => "workspace:list".to_string(),
+            WorkspaceCommands::Link { .. } => "workspace:link".to_string(),
+            WorkspaceCommands::Relink { .. } => "workspace:relink".to_string(),
+            WorkspaceCommands::Doctor { .. } => "workspace:doctor".to_string(),
+            WorkspaceCommands::Setup { .. } => "workspace:setup".to_string(),
+            WorkspaceCommands::Update { .. } => "workspace:update".to_string(),
+            WorkspaceCommands::Open { .. } => "workspace:open".to_string(),
+        },
+        Commands::Schema(cmd) => match cmd {
+            SchemaCommands::Which { .. } => "schema:which".to_string(),
+            SchemaCommands::Validate { .. } => "schema:validate".to_string(),
+            SchemaCommands::Fork { .. } => "schema:fork".to_string(),
+            SchemaCommands::Init { .. } => "schema:init".to_string(),
+        },
+        Commands::Set(cmd) => match cmd {
+            SetCommands::Change { .. } => "set:change".to_string(),
         },
     }
 }
@@ -240,6 +551,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     if cli.no_color {
         unsafe { std::env::set_var("NO_COLOR", "1") };
     }
+
+    // One-time best-effort migration of legacy macOS global config to the upstream-aligned
+    // location (no-op on other platforms). Must run before telemetry reads the config.
+    crate::core::config::migrate_legacy_macos_global_config();
 
     // Telemetry: show first-run notice and track command
     crate::telemetry::maybe_show_telemetry_notice();
@@ -288,6 +603,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Schemas { json } => {
             crate::cli::schemas::run_schemas(json)?;
+        }
+        Commands::Templates { schema, json } => {
+            crate::cli::templates::run(schema.as_deref(), json)?;
         }
         Commands::Show {
             name,
@@ -354,6 +672,21 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 crate::cli::completion::run_completion_uninstall(shell.as_deref(), _yes)?;
             }
         },
+        Commands::ContextStore(cmd) => {
+            crate::cli::context_store::run(cmd)?;
+        }
+        Commands::Initiative(cmd) => {
+            crate::cli::initiative::run(cmd)?;
+        }
+        Commands::Workspace(cmd) => {
+            crate::cli::workspace::run(cmd)?;
+        }
+        Commands::Schema(cmd) => {
+            crate::cli::schema::run(cmd)?;
+        }
+        Commands::Set(cmd) => {
+            crate::cli::set::run(cmd)?;
+        }
     }
 
     // Telemetry: flush pending events before exit

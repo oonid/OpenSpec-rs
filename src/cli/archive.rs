@@ -135,7 +135,7 @@ struct MergeCounts {
 fn apply_spec_update(
     update: &SpecUpdate,
     change_name: &str,
-    _no_validate: bool,
+    no_validate: bool,
 ) -> Result<MergeResult> {
     let change_content = std::fs::read_to_string(&update.source)
         .map_err(|e| OpenSpecError::Custom(format!("Failed to read source spec: {}", e)))?;
@@ -150,6 +150,24 @@ fn apply_spec_update(
 
     let result = merge_delta_plan(&target_content, &plan, &update.spec_name, change_name)
         .map_err(OpenSpecError::Custom)?;
+
+    // Re-validate the merged spec before writing, so archive never persists a structurally
+    // invalid main spec (mirrors upstream applySpecs re-validation). Skip with --no-validate.
+    if !no_validate {
+        let errors: Vec<String> =
+            crate::cli::validate::collect_spec_issues(&result.rebuilt, &update.spec_name)
+                .into_iter()
+                .filter(|i| i.level == "ERROR")
+                .map(|i| i.message)
+                .collect();
+        if !errors.is_empty() {
+            return Err(OpenSpecError::Custom(format!(
+                "Refusing to archive: merged spec '{}' would be invalid:\n  - {}\n(use --no-validate to override)",
+                update.spec_name,
+                errors.join("\n  - ")
+            )));
+        }
+    }
 
     let target_dir = update.target.parent().unwrap();
     std::fs::create_dir_all(target_dir)

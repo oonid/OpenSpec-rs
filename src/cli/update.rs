@@ -1,9 +1,15 @@
 use crate::core::config::{ConfigManager, OPENSPEC_DIR_NAME};
 use crate::core::error::{OpenSpecError, Result};
+use crate::core::workspace::is_workspace_root;
 
 pub fn run_update(force: bool) -> Result<()> {
     let project_root = std::env::current_dir()
         .map_err(|e| OpenSpecError::Custom(format!("Failed to get current directory: {}", e)))?;
+
+    // Check if we're in a workspace root
+    if is_workspace_root(&project_root) {
+        eprintln!("Hint: This directory is a workspace root. Use 'openspec workspace update' to refresh workspace-local guidance and agent skills.");
+    }
 
     let openspec_path = project_root.join(OPENSPEC_DIR_NAME);
 

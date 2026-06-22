@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 use std::path::Path;
 
-use crate::ai_tools::generator::{get_tool_by_value, AI_TOOLS};
+use crate::ai_tools::generator::{detect_available_tools, get_tool_by_value, AI_TOOLS};
 use crate::core::config::ProjectConfig;
 use crate::core::error::{OpenSpecError, Result};
 use crate::templates::{
@@ -23,14 +23,6 @@ pub fn validate_write_permissions(path: &Path) -> Result<()> {
     })?;
     let _ = std::fs::remove_file(&test_file);
     Ok(())
-}
-
-fn detect_available_tools(project_path: &Path) -> Vec<&'static str> {
-    AI_TOOLS
-        .iter()
-        .filter(|tool| project_path.join(tool.skills_dir).exists())
-        .map(|tool| tool.value)
-        .collect()
 }
 
 pub fn resolve_tool_selection(

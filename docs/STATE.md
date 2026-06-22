@@ -23,8 +23,9 @@ This file serves as:
 ## Setup
 
 - OpenSpec TS source: `vendor/OpenSpec/` (git submodule) - for reference/sync only
-  - Current version: `v1.2.0-5-gafdca0d` (commit `afdca0d5dab1aa109cfd8848b2512333ccad60c3`)
-  - Last synced: 2026-03-14
+  - Current version: `v1.4.1` (commit `1b06fdd`)
+  - Last synced: 2026-06-20
+  - Previous baseline marked at git tag `rs-sync-baseline` (`afdca0d`, `v1.2.0-5`)
 - **Rust binary**: Build with `cargo build --release`, binary at `target/release/openspec`
 - Initialized OpenSpec for this project: `openspec/` and `.opencode/` directories exist
 
@@ -53,11 +54,14 @@ The `vendor/OpenSpec/` submodule contains the upstream TypeScript implementation
 |-----------|-------------|--------------|-------|
 | CLI Commands | Complete | `src/cli/` | All commands ported |
 | Schema System | Complete | `src/core/schema/` | Schemas embedded in binary |
-| Spec Parser | Complete | `src/core/parser/` | pulldown-cmark based |
+| Spec Parser | Complete | `src/core/parser/` | pulldown-cmark based; case-insensitive headers |
 | Artifact Graph | Complete | `src/core/artifact/` | Status computation |
-| AI Tool Integration | Complete | `src/ai_tools/` | 6 skills embedded |
-| Shell Completion | Complete | `src/cli/completion/` | bash/zsh/fish |
-| Telemetry | Complete | `src/telemetry/` | PostHog, opt-out |
+| AI Tool Integration | Complete | `src/ai_tools/` | incl. Bob/ForgeCode/Junie/Kimi/Lingma/Vibe + Copilot detection paths |
+| Shell Completion | Complete | `src/cli/completion/` | bash/zsh/fish, opt-in install |
+| Telemetry | Complete | `src/telemetry/` | PostHog, opt-out, firewall-silent |
+| Context Store | Complete | `src/core/context_store/` | registry.yaml + store.yaml + CLI; git-nesting guard on `setup --path` |
+| Initiatives | Complete | `src/core/collections/initiatives/` | initiative.yaml + 5 md files + CLI |
+| Workspace (beta) | Complete | `src/core/workspace/` | view.yaml/registry, openers, skills, CLI |
 
 ### How to Sync After Upgrading vendor/OpenSpec/
 
@@ -240,20 +244,22 @@ Location: `openspec/changes/archive/2026-03-15-port-to-rust-binary/`
 
 | Version | Date | Notes |
 |---------|------|-------|
+| v0.2.0 | 2026-06-20 | Sync to upstream v1.4.1: new AI tools, parser/validation/completion/telemetry fixes, macOS dir interop, and context-store / initiatives / workspace subsystems |
 | v0.1.4 | 2026-03-15 | Documentation complete, port-to-rust-binary archived, main specs created |
 | v0.1.3 | 2026-03-14 | Rust 1.75 MSRV, pinned dependencies, GitHub Actions updates |
 | v0.1.2 | 2026-03-14 | Fix ARM cross-compilation strip |
 | v0.1.1 | 2026-03-14 | Fix CI build before tests |
 | v0.1.0 | 2026-03-14 | Initial release |
 
-## Current Version: 0.1.4
+## Current Version: 0.2.0
 
 - MSRV: Rust 1.75+
-- Pinned dependencies for Rust 1.75 compatibility
-- GitHub Actions updated to latest versions
+- Synced to upstream OpenSpec v1.4.1 (see CHANGELOG `[0.2.0]`)
+- New AI tools and `detectionPaths` auto-detection; opt-in completion install; firewall-silent telemetry
+- Global config/data dirs aligned with upstream on macOS
+- New subsystems: context-store, initiatives, workspace (beta) — with CLI commands
 - All 6 skills embedded: explore, propose, apply-change, archive-change, verify-change, sync-specs
-- Documentation complete (README, CONTRIBUTING, CHANGELOG, ARCHITECTURE, INSTALLATION)
-- Main specs created from port-to-rust-binary change
+- Change `sync-upstream-v1-4-1` lives in `openspec/changes/` (archive after release)
 
 ## See Also
 

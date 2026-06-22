@@ -1,6 +1,9 @@
 use crate::core::config::OPENSPEC_DIR_NAME;
 use crate::core::error::{OpenSpecError, Result};
-use crate::core::spec_parser::{parse_delta_spec, SpecParser};
+use crate::core::spec_parser::{
+    build_code_fence_mask, normalize_requirement_name, parse_delta_spec, RequirementBlock,
+    SpecParser,
+};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ValidationIssue {
@@ -348,7 +351,7 @@ fn run_bulk_validation(
     Ok(())
 }
 
-fn validate_change(change_dir: &std::path::Path, _strict: bool) -> Result<ValidationReport> {
+fn validate_change(change_dir: &std::path::Path, strict: bool) -> Result<ValidationReport> {
     let mut issues: Vec<ValidationIssue> = Vec::new();
     let specs_dir = change_dir.join("specs");
 
@@ -358,10 +361,7 @@ fn validate_change(change_dir: &std::path::Path, _strict: bool) -> Result<Valida
             path: "specs/".to_string(),
             message: "Change has no specs/ directory. Add delta specs with ADDED/MODIFIED/REMOVED/RENAMED sections.".to_string(),
         });
-        return Ok(ValidationReport {
-            valid: false,
-            issues,
-        });
+        return Ok(finalize_report(issues, strict));
     }
 
     let mut total_deltas = 0;
@@ -413,14 +413,51 @@ fn validate_change(change_dir: &std::path::Path, _strict: bool) -> Result<Valida
                 }
             }
 
+            // Track normalized requirement names per section to detect duplicates and
+            // cross-section conflicts, mirroring upstream Validator.validateChange.
+            let mut added_names: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            let mut modified_names: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            let mut removed_names: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            let mut renamed_from: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            let mut renamed_to: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+
             for req in &plan.added {
                 total_deltas += 1;
-                if !contains_shall_or_must(&req.raw) {
+                let key = normalize_requirement_name(&req.name);
+                if added_names.contains(&key) {
                     issues.push(ValidationIssue {
                         level: "ERROR".to_string(),
                         path: entry_path.clone(),
-                        message: format!("ADDED \"{}\" must contain SHALL or MUST", req.name),
+                        message: format!("Duplicate requirement in ADDED: \"{}\"", req.name),
                     });
+                } else {
+                    added_names.insert(key);
+                }
+                // `raw` includes the header line, so check the body specifically: a
+                // requirement whose only SHALL/MUST is in the header still needs the keyword
+                // moved into the body.
+                if !contains_shall_or_must(requirement_body(req)) {
+                    if contains_shall_or_must(&req.header_line) {
+                        issues.push(ValidationIssue {
+                            level: "ERROR".to_string(),
+                            path: entry_path.clone(),
+                            message: format!(
+                                "ADDED \"{}\": normative keyword (SHALL/MUST) found only in header. Move the keyword to the requirement body.",
+                                req.name
+                            ),
+                        });
+                    } else {
+                        issues.push(ValidationIssue {
+                            level: "ERROR".to_string(),
+                            path: entry_path.clone(),
+                            message: format!("ADDED \"{}\" must contain SHALL or MUST", req.name),
+                        });
+                    }
                 }
                 if count_scenarios(&req.raw) < 1 {
                     issues.push(ValidationIssue {
@@ -436,12 +473,36 @@ fn validate_change(change_dir: &std::path::Path, _strict: bool) -> Result<Valida
 
             for req in &plan.modified {
                 total_deltas += 1;
-                if !contains_shall_or_must(&req.raw) {
+                let key = normalize_requirement_name(&req.name);
+                if modified_names.contains(&key) {
                     issues.push(ValidationIssue {
                         level: "ERROR".to_string(),
                         path: entry_path.clone(),
-                        message: format!("MODIFIED \"{}\" must contain SHALL or MUST", req.name),
+                        message: format!("Duplicate requirement in MODIFIED: \"{}\"", req.name),
                     });
+                } else {
+                    modified_names.insert(key);
+                }
+                if !contains_shall_or_must(requirement_body(req)) {
+                    if contains_shall_or_must(&req.header_line) {
+                        issues.push(ValidationIssue {
+                            level: "ERROR".to_string(),
+                            path: entry_path.clone(),
+                            message: format!(
+                                "MODIFIED \"{}\": normative keyword (SHALL/MUST) found only in header. Move the keyword to the requirement body.",
+                                req.name
+                            ),
+                        });
+                    } else {
+                        issues.push(ValidationIssue {
+                            level: "ERROR".to_string(),
+                            path: entry_path.clone(),
+                            message: format!(
+                                "MODIFIED \"{}\" must contain SHALL or MUST",
+                                req.name
+                            ),
+                        });
+                    }
                 }
                 if count_scenarios(&req.raw) < 1 {
                     issues.push(ValidationIssue {
@@ -455,8 +516,100 @@ fn validate_change(change_dir: &std::path::Path, _strict: bool) -> Result<Valida
                 }
             }
 
-            total_deltas += plan.removed.len();
-            total_deltas += plan.renamed.len();
+            for name in &plan.removed {
+                total_deltas += 1;
+                let key = normalize_requirement_name(name);
+                if removed_names.contains(&key) {
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: entry_path.clone(),
+                        message: format!("Duplicate requirement in REMOVED: \"{}\"", name),
+                    });
+                } else {
+                    removed_names.insert(key);
+                }
+            }
+
+            for rp in &plan.renamed {
+                total_deltas += 1;
+                let from_key = normalize_requirement_name(&rp.from);
+                let to_key = normalize_requirement_name(&rp.to);
+                if renamed_from.contains(&from_key) {
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: entry_path.clone(),
+                        message: format!("Duplicate FROM in RENAMED: \"{}\"", rp.from),
+                    });
+                } else {
+                    renamed_from.insert(from_key);
+                }
+                if renamed_to.contains(&to_key) {
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: entry_path.clone(),
+                        message: format!("Duplicate TO in RENAMED: \"{}\"", rp.to),
+                    });
+                } else {
+                    renamed_to.insert(to_key);
+                }
+            }
+
+            // Cross-section conflicts (within the same spec file).
+            for n in &modified_names {
+                if removed_names.contains(n) {
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: entry_path.clone(),
+                        message: format!(
+                            "Requirement present in both MODIFIED and REMOVED: \"{}\"",
+                            n
+                        ),
+                    });
+                }
+                if added_names.contains(n) {
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: entry_path.clone(),
+                        message: format!(
+                            "Requirement present in both MODIFIED and ADDED: \"{}\"",
+                            n
+                        ),
+                    });
+                }
+            }
+            for n in &added_names {
+                if removed_names.contains(n) {
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: entry_path.clone(),
+                        message: format!(
+                            "Requirement present in both ADDED and REMOVED: \"{}\"",
+                            n
+                        ),
+                    });
+                }
+            }
+            for rp in &plan.renamed {
+                let from_key = normalize_requirement_name(&rp.from);
+                let to_key = normalize_requirement_name(&rp.to);
+                if modified_names.contains(&from_key) {
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: entry_path.clone(),
+                        message: format!(
+                            "MODIFIED references old name from RENAMED. Use new header for \"{}\"",
+                            rp.to
+                        ),
+                    });
+                }
+                if added_names.contains(&to_key) {
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: entry_path.clone(),
+                        message: format!("RENAMED TO collides with ADDED for \"{}\"", rp.to),
+                    });
+                }
+            }
         }
     }
 
@@ -478,11 +631,10 @@ fn validate_change(change_dir: &std::path::Path, _strict: bool) -> Result<Valida
         });
     }
 
-    let valid = issues.iter().all(|i| i.level != "ERROR");
-    Ok(ValidationReport { valid, issues })
+    Ok(finalize_report(issues, strict))
 }
 
-fn validate_spec(spec_path: &std::path::Path, _strict: bool) -> Result<ValidationReport> {
+fn validate_spec(spec_path: &std::path::Path, strict: bool) -> Result<ValidationReport> {
     let mut issues: Vec<ValidationIssue> = Vec::new();
 
     if !spec_path.exists() {
@@ -491,10 +643,7 @@ fn validate_spec(spec_path: &std::path::Path, _strict: bool) -> Result<Validatio
             path: "file".to_string(),
             message: format!("Spec file not found: {}", spec_path.display()),
         });
-        return Ok(ValidationReport {
-            valid: false,
-            issues,
-        });
+        return Ok(finalize_report(issues, strict));
     }
 
     let content = std::fs::read_to_string(spec_path)
@@ -506,8 +655,18 @@ fn validate_spec(spec_path: &std::path::Path, _strict: bool) -> Result<Validatio
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let mut parser = SpecParser::new(&content);
-    match parser.parse_spec(&spec_name) {
+    issues.extend(collect_spec_issues(&content, &spec_name));
+
+    Ok(finalize_report(issues, strict))
+}
+
+/// Validate a main spec from its raw content, mirroring upstream SpecSchema/base.schema.ts.
+/// Returns the collected issues (ERRORs for the normative rules, a WARNING for a brief purpose).
+/// Shared by the `validate` command and the archive post-merge re-validation.
+pub(crate) fn collect_spec_issues(content: &str, spec_name: &str) -> Vec<ValidationIssue> {
+    let mut issues: Vec<ValidationIssue> = Vec::new();
+    let mut parser = SpecParser::new(content);
+    match parser.parse_spec(spec_name) {
         Ok(spec) => {
             if spec.overview.len() < 10 {
                 issues.push(ValidationIssue {
@@ -517,15 +676,38 @@ fn validate_spec(spec_path: &std::path::Path, _strict: bool) -> Result<Validatio
                 });
             }
 
+            // Mirror upstream SpecSchema: a spec must declare at least one requirement.
+            if spec.requirements.is_empty() {
+                issues.push(ValidationIssue {
+                    level: "ERROR".to_string(),
+                    path: "requirements".to_string(),
+                    message: "Spec must have at least one requirement".to_string(),
+                });
+            }
+
             for (idx, req) in spec.requirements.iter().enumerate() {
+                // RequirementSchema: text must be non-empty.
+                if req.text.trim().is_empty() {
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: format!("requirements[{}].text", idx),
+                        message: "Requirement text cannot be empty".to_string(),
+                    });
+                } else if !contains_shall_or_must(&req.text) {
+                    // RequirementSchema refinement: text must contain SHALL or MUST.
+                    issues.push(ValidationIssue {
+                        level: "ERROR".to_string(),
+                        path: format!("requirements[{}].text", idx),
+                        message: "Requirement must contain SHALL or MUST keyword".to_string(),
+                    });
+                }
+
+                // RequirementSchema: at least one scenario is required.
                 if req.scenarios.is_empty() {
                     issues.push(ValidationIssue {
-                        level: "WARNING".to_string(),
+                        level: "ERROR".to_string(),
                         path: format!("requirements[{}].scenarios", idx),
-                        message: format!(
-                            "Requirement '{}' has no scenarios. Add '#### Scenario:' blocks.",
-                            req.text.chars().take(50).collect::<String>()
-                        ),
+                        message: "Requirement must have at least one scenario".to_string(),
                     });
                 }
             }
@@ -538,9 +720,7 @@ fn validate_spec(spec_path: &std::path::Path, _strict: bool) -> Result<Validatio
             });
         }
     }
-
-    let valid = issues.iter().all(|i| i.level != "ERROR");
-    Ok(ValidationReport { valid, issues })
+    issues
 }
 
 fn print_report(name: &str, item_type: &str, report: &ValidationReport) {
@@ -643,13 +823,189 @@ fn get_available_specs(project_root: &std::path::Path) -> Result<Vec<String>> {
     Ok(specs)
 }
 
+/// Mirrors upstream `createReport`: a report is valid when there are no ERRORs and,
+/// under `strict`, no WARNINGs either.
+fn finalize_report(issues: Vec<ValidationIssue>, strict: bool) -> ValidationReport {
+    let errors = issues.iter().filter(|i| i.level == "ERROR").count();
+    let warnings = issues.iter().filter(|i| i.level == "WARNING").count();
+    let valid = errors == 0 && (!strict || warnings == 0);
+    ValidationReport { valid, issues }
+}
+
 fn contains_shall_or_must(text: &str) -> bool {
     text.to_uppercase().contains("SHALL") || text.to_uppercase().contains("MUST")
 }
 
+/// Returns the requirement body (the `raw` block with its `### Requirement:` header line
+/// stripped). `raw` always begins with `header_line`, so this isolates the body text used
+/// to decide whether the normative keyword lives in the body or only in the header.
+fn requirement_body(req: &RequirementBlock) -> &str {
+    req.raw
+        .strip_prefix(req.header_line.as_str())
+        .unwrap_or(&req.raw)
+}
+
 fn count_scenarios(block_raw: &str) -> usize {
-    block_raw
-        .lines()
-        .filter(|line| line.trim().starts_with("#### "))
+    // Mask computed locally over the block text; scenario headers inside a fenced
+    // code block are examples, not real scenarios, and must not be counted.
+    let lines: Vec<&str> = block_raw.lines().collect();
+    let mask = build_code_fence_mask(&lines);
+    lines
+        .iter()
+        .enumerate()
+        .filter(|(i, line)| !mask[*i] && line.trim().starts_with("#### "))
         .count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_contains_shall_or_must() {
+        assert!(contains_shall_or_must("The system SHALL do something"));
+        assert!(contains_shall_or_must("The system MUST do something"));
+        assert!(contains_shall_or_must("The system shall do something"));
+        assert!(contains_shall_or_must("The system must do something"));
+        assert!(!contains_shall_or_must("The system should do something"));
+        assert!(!contains_shall_or_must("The system may do something"));
+    }
+
+    fn block(header: &str, body: &str) -> RequirementBlock {
+        RequirementBlock {
+            header_line: header.to_string(),
+            name: "x".to_string(),
+            raw: format!("{}\n{}", header, body),
+        }
+    }
+
+    #[test]
+    fn test_requirement_body_strips_header() {
+        let req = block("### Requirement: Foo", "The system SHALL do it.");
+        assert_eq!(requirement_body(&req), "\nThe system SHALL do it.");
+    }
+
+    #[test]
+    fn test_keyword_only_in_header_flagged_via_body() {
+        // SHALL only in the header → body lacks the keyword, so validation must still flag it.
+        let header_only = block(
+            "### Requirement: SHALL validate input",
+            "The validation logic processes the data.",
+        );
+        assert!(contains_shall_or_must(header_only.header_line.as_str()));
+        assert!(!contains_shall_or_must(requirement_body(&header_only)));
+
+        // Keyword in the body → body check passes, no error.
+        let in_body = block(
+            "### Requirement: Validate input",
+            "The system SHALL validate the input data.",
+        );
+        assert!(contains_shall_or_must(requirement_body(&in_body)));
+    }
+
+    use tempfile::TempDir;
+
+    fn write_spec(content: &str) -> (TempDir, std::path::PathBuf) {
+        let dir = TempDir::new().unwrap();
+        let spec_dir = dir.path().join("cap");
+        std::fs::create_dir_all(&spec_dir).unwrap();
+        let spec_path = spec_dir.join("spec.md");
+        std::fs::write(&spec_path, content).unwrap();
+        (dir, spec_path)
+    }
+
+    fn write_change_delta(content: &str) -> (TempDir, std::path::PathBuf) {
+        let dir = TempDir::new().unwrap();
+        let cap_dir = dir.path().join("specs").join("cap");
+        std::fs::create_dir_all(&cap_dir).unwrap();
+        std::fs::write(cap_dir.join("spec.md"), content).unwrap();
+        let change_dir = dir.path().to_path_buf();
+        (dir, change_dir)
+    }
+
+    fn has_error(report: &ValidationReport, needle: &str) -> bool {
+        report
+            .issues
+            .iter()
+            .any(|i| i.level == "ERROR" && i.message.contains(needle))
+    }
+
+    #[test]
+    fn test_spec_requirement_without_shall_is_error() {
+        let (_dir, spec_path) = write_spec(
+            "## Purpose\n\nA reasonably long purpose statement here.\n\n## Requirements\n\n### Requirement: Do thing\n\nThe system may do the thing.\n\n#### Scenario: Basic\n- **WHEN** x\n- **THEN** y\n",
+        );
+        let report = validate_spec(&spec_path, false).unwrap();
+        assert!(!report.valid);
+        assert!(has_error(
+            &report,
+            "Requirement must contain SHALL or MUST keyword"
+        ));
+    }
+
+    #[test]
+    fn test_spec_requirement_without_scenario_is_error() {
+        let (_dir, spec_path) = write_spec(
+            "## Purpose\n\nA reasonably long purpose statement here.\n\n## Requirements\n\n### Requirement: Do thing\n\nThe system SHALL do the thing.\n",
+        );
+        let report = validate_spec(&spec_path, false).unwrap();
+        assert!(!report.valid);
+        assert!(has_error(
+            &report,
+            "Requirement must have at least one scenario"
+        ));
+    }
+
+    #[test]
+    fn test_spec_with_zero_requirements_is_error() {
+        let (_dir, spec_path) = write_spec(
+            "## Purpose\n\nA reasonably long purpose statement here.\n\n## Requirements\n",
+        );
+        let report = validate_spec(&spec_path, false).unwrap();
+        assert!(!report.valid);
+        assert!(has_error(
+            &report,
+            "Spec must have at least one requirement"
+        ));
+    }
+
+    #[test]
+    fn test_change_duplicate_added_name_is_error() {
+        let (_dir, change_dir) = write_change_delta(
+            "## ADDED Requirements\n\n### Requirement: Foo\n\nThe system SHALL foo.\n\n#### Scenario: A\n- **WHEN** x\n- **THEN** y\n\n### Requirement: Foo\n\nThe system SHALL foo again.\n\n#### Scenario: B\n- **WHEN** x\n- **THEN** y\n",
+        );
+        let report = validate_change(&change_dir, false).unwrap();
+        assert!(!report.valid);
+        assert!(has_error(
+            &report,
+            "Duplicate requirement in ADDED: \"Foo\""
+        ));
+    }
+
+    #[test]
+    fn test_change_same_name_added_and_removed_is_error() {
+        let (_dir, change_dir) = write_change_delta(
+            "## ADDED Requirements\n\n### Requirement: Foo\n\nThe system SHALL foo.\n\n#### Scenario: A\n- **WHEN** x\n- **THEN** y\n\n## REMOVED Requirements\n\n### Requirement: Foo\n",
+        );
+        let report = validate_change(&change_dir, false).unwrap();
+        assert!(!report.valid);
+        assert!(has_error(
+            &report,
+            "Requirement present in both ADDED and REMOVED: \"Foo\"",
+        ));
+    }
+
+    #[test]
+    fn test_strict_turns_warning_only_report_invalid() {
+        // Brief purpose is a WARNING (not an error). Valid without strict, invalid with strict.
+        let (_dir, spec_path) = write_spec(
+            "## Purpose\n\nshort\n\n## Requirements\n\n### Requirement: Do thing\n\nThe system SHALL do the thing.\n\n#### Scenario: Basic\n- **WHEN** x\n- **THEN** y\n",
+        );
+        let lenient = validate_spec(&spec_path, false).unwrap();
+        assert!(lenient.valid);
+        assert!(lenient.issues.iter().any(|i| i.level == "WARNING"));
+
+        let strict = validate_spec(&spec_path, true).unwrap();
+        assert!(!strict.valid);
+    }
 }

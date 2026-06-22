@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-22
+
+Sync with upstream OpenSpec `v1.2.0` → `v1.4.1`, plus a parity audit of the
+whole port against upstream that fixed several pre-existing interop/correctness
+gaps.
+
+### Added
+- New AI tools: Bob Shell, ForgeCode, Junie, Kimi CLI, Lingma, Mistral Vibe
+- `detectionPaths`-based AI-tool auto-detection (fixes GitHub Copilot false positive from a bare `.github/`)
+- `sync` workflow included in the default `core` profile
+- **Context stores** — `openspec context-store <setup|register|unregister|remove|list|doctor>`, backed by a global `context-stores/registry.yaml` and per-store `.openspec-store/store.yaml`
+- **Initiatives** — `openspec initiative <create|show|list>` with `--store`/`--store-path`/`--json`, stored under `<store>/initiatives/<id>/`
+- **Workspaces (beta)** — `openspec workspace <setup|list|link|relink|doctor|update|open>`, with `.openspec-workspace/view.yaml` view state, a managed `workspaces/registry.yaml`, AGENTS.md guidance + `<name>.code-workspace` generation, and per-tool workspace skills
+- `openspec templates [--schema <name>] [--json]` — show resolved template paths per artifact
+- `openspec schema <which|validate|fork|init>` — inspect, validate, copy, and scaffold workflow schemas
+- `openspec set change <name> --initiative <id>` — link a repo-local change to an initiative
+
+### Changed
+- Spec parser: requirement headers parsed case-insensitively; **Markdown headers inside fenced code blocks are ignored** (not parsed as requirements/scenarios), matching upstream
+- `validate`: now matches upstream strictness — ERROR (not warning) when a spec has no requirements or a requirement lacks SHALL/MUST or a scenario; change validation detects duplicate and cross-section delta conflicts; `--strict` makes warnings fail; plus a hint when SHALL/MUST appears only in a requirement header
+- `show --json`: emits the upstream JSON shape (camelCase `requirementCount`/`deltaCount`/`rawText`, spec `metadata` block, rich change deltas with `spec`/`operation`/`requirement`/`rename`)
+- Global `config.json` written with upstream camelCase keys (`featureFlags`, `anonymousId`, `noticeSeen`); snake_case still read for back-compat
+- Shell completion install is opt-in
+- Global config/data dirs now match upstream on macOS (`~/.config`, `~/.local/share` instead of `~/Library/Application Support`), with a best-effort migration; the Rust binary and npm CLI now share locations
+- Top-level `openspec update` prints a hint in a workspace root but stays project-scoped; foreign root `workspace.yaml` files are ignored
+
+### Fixed
+- Telemetry fails silently in firewalled environments (1s timeout, no retries)
+- `--json` output no longer leaks spinner text to stderr
+- `context-store setup --path <p>` refuses a path inside an existing Git repository (git-nesting guard), with a `--allow-inside-git-repository` escape hatch
+- `archive` re-validates each merged main spec before writing it (honoring `--no-validate`), so a bad merge can no longer silently corrupt specs
+
+### Known gaps
+- `openspec feedback` and the interactive `openspec view` dashboard are not ported
+- Package-schema resolution uses a dev-only `vendor/OpenSpec/schemas` path; installed binaries fall back to the embedded schema
+
 ## [0.1.4] - 2026-03-15
 
 ### Added
