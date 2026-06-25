@@ -107,23 +107,26 @@ AI:  Archived. Specs updated.
 | Command | Description |
 |---------|-------------|
 | `init [path]` | Initialize OpenSpec in a project |
-| `new change <name>` | Create a new change directory |
+| `new change <name>` | Create a new change directory; supports `--json`, `--goal`, `--affected-areas`, `--initiative`, `--store`, and `--store-path` |
 | `list` | List changes (or specs with `--specs`) |
 | `status` | Show artifact completion status |
 | `instructions [artifact]` | Get instructions for creating artifacts |
 | `schemas` | List available workflow schemas |
-| `show [item]` | Show a change or spec |
-| `validate [item]` | Validate changes and specs |
+| `show [item]` | Show a change or spec; `--json` supports `--requirements`, `--requirement <n>`, and `--no-scenarios` |
+| `validate [item]` | Validate changes and specs with `--all`, `--changes`, `--specs`, `--strict`, and `--concurrency <n>` |
 | `archive [change]` | Archive a completed change |
+| `feedback <message>` | File feedback as a GitHub issue (via `gh`, with a manual-URL fallback) |
 | `update [path]` | Update AI tool instruction files |
-| `config` | View and modify configuration |
-| `completion` | Generate shell completions |
+| `config` | View and modify configuration via `path`, `list`, `get`, `set`, `unset`, `reset`, `edit`, and `profile` |
+| `completion` | Generate or install shell completions |
 | `context-store` | Set up and inspect local context stores (beta) |
 | `initiative` | Create and inspect coordinated initiatives (beta) |
 | `workspace` | Set up and inspect coordination workspaces (beta) |
 | `templates` | Show resolved template paths for a schema |
 | `schema` | Inspect, validate, fork, or init workflow schemas |
 | `set change` | Link a repo-local change to an initiative |
+
+Global compatibility flags: `--no-color` and `--no-interactive` are accepted on all commands; `--no-interactive` is a no-op in the Rust CLI.
 
 ## Coordination: Context Stores, Initiatives & Workspaces (beta)
 

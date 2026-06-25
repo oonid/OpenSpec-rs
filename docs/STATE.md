@@ -244,6 +244,7 @@ Location: `openspec/changes/archive/2026-03-15-port-to-rust-binary/`
 
 | Version | Date | Notes |
 |---------|------|-------|
+| v0.3.0 | 2026-06-25 | CLI parity with upstream v1.4.1: config subcommands (breaking), feedback (GitHub issue), schema fork/init, templates, set change, show spec-filters, validate --concurrency, --no-interactive, embedded package-schema resolution |
 | v0.2.0 | 2026-06-20 | Sync to upstream v1.4.1: new AI tools, parser/validation/completion/telemetry fixes, macOS dir interop, and context-store / initiatives / workspace subsystems |
 | v0.1.4 | 2026-03-15 | Documentation complete, port-to-rust-binary archived, main specs created |
 | v0.1.3 | 2026-03-14 | Rust 1.75 MSRV, pinned dependencies, GitHub Actions updates |
@@ -251,15 +252,15 @@ Location: `openspec/changes/archive/2026-03-15-port-to-rust-binary/`
 | v0.1.1 | 2026-03-14 | Fix CI build before tests |
 | v0.1.0 | 2026-03-14 | Initial release |
 
-## Current Version: 0.2.0
+## Current Version: 0.3.0
 
 - MSRV: Rust 1.75+
-- Synced to upstream OpenSpec v1.4.1 (see CHANGELOG `[0.2.0]`)
-- New AI tools and `detectionPaths` auto-detection; opt-in completion install; firewall-silent telemetry
-- Global config/data dirs aligned with upstream on macOS
+- Synced to upstream OpenSpec v1.4.1 (see CHANGELOG `[0.2.0]` and `[0.3.0]`)
+- Full CLI parity with upstream v1.4.1: config subcommands (breaking change), feedback (files a GitHub issue), schema fork/init, templates, set change, show spec-filters, validate --concurrency + OPENSPEC_CONCURRENCY, global --no-interactive
+- Package-schema resolution uses the embedded `spec-driven` definition (no dev-only vendor path)
 - New subsystems: context-store, initiatives, workspace (beta) — with CLI commands
 - All 6 skills embedded: explore, propose, apply-change, archive-change, verify-change, sync-specs
-- Change `sync-upstream-v1-4-1` lives in `openspec/changes/` (archive after release)
+- Known gaps: interactive `view` dashboard, and deprecated `spec`/`change` noun command groups, not ported
 
 ## See Also
 

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-06-22
+## [0.3.0] - 2026-06-25
 
 Sync with upstream OpenSpec `v1.2.0` → `v1.4.1`, plus a parity audit of the
 whole port against upstream that fixed several pre-existing interop/correctness
@@ -20,11 +20,16 @@ gaps.
 - **Workspaces (beta)** — `openspec workspace <setup|list|link|relink|doctor|update|open>`, with `.openspec-workspace/view.yaml` view state, a managed `workspaces/registry.yaml`, AGENTS.md guidance + `<name>.code-workspace` generation, and per-tool workspace skills
 - `openspec templates [--schema <name>] [--json]` — show resolved template paths per artifact
 - `openspec schema <which|validate|fork|init>` — inspect, validate, copy, and scaffold workflow schemas
+- `openspec feedback <message> [--body <text>]` — file feedback as a GitHub issue via the `gh` CLI, with a manual issue-URL fallback when `gh` is missing or unauthenticated
 - `openspec set change <name> --initiative <id>` — link a repo-local change to an initiative
 
 ### Changed
+- `config` now uses upstream-style subcommands (`path`, `list`, `get`, `set`, `unset`, `reset`, `edit`, `profile`) instead of the old flat `--set/--get/--list` flags. This is a breaking CLI surface change.
+- `new change` now supports upstream parity flags: `--json`, `--goal`, `--affected-areas`, `--initiative`, `--store`, and `--store-path`
+- `show --json` now supports spec-filter flags `--requirements`, `--requirement <n>`, and `--no-scenarios`; those flags are JSON-only and warn when used on a change
+- `validate` now supports bounded parallelism via `--concurrency <n>` and matches upstream strictness — ERROR (not warning) when a spec has no requirements or a requirement lacks SHALL/MUST or a scenario; change validation detects duplicate and cross-section delta conflicts; `--strict` makes warnings fail; plus a hint when SHALL/MUST appears only in a requirement header
+- Global `--no-interactive` is accepted as a no-op for upstream CLI compatibility
 - Spec parser: requirement headers parsed case-insensitively; **Markdown headers inside fenced code blocks are ignored** (not parsed as requirements/scenarios), matching upstream
-- `validate`: now matches upstream strictness — ERROR (not warning) when a spec has no requirements or a requirement lacks SHALL/MUST or a scenario; change validation detects duplicate and cross-section delta conflicts; `--strict` makes warnings fail; plus a hint when SHALL/MUST appears only in a requirement header
 - `show --json`: emits the upstream JSON shape (camelCase `requirementCount`/`deltaCount`/`rawText`, spec `metadata` block, rich change deltas with `spec`/`operation`/`requirement`/`rename`)
 - Global `config.json` written with upstream camelCase keys (`featureFlags`, `anonymousId`, `noticeSeen`); snake_case still read for back-compat
 - Shell completion install is opt-in
@@ -36,10 +41,10 @@ gaps.
 - `--json` output no longer leaks spinner text to stderr
 - `context-store setup --path <p>` refuses a path inside an existing Git repository (git-nesting guard), with a `--allow-inside-git-repository` escape hatch
 - `archive` re-validates each merged main spec before writing it (honoring `--no-validate`), so a bad merge can no longer silently corrupt specs
+- Built-in package-schema resolution now uses the embedded `spec-driven` definition instead of a dev-only `vendor/OpenSpec/schemas` path, so installed binaries work from arbitrary directories
 
 ### Known gaps
-- `openspec feedback` and the interactive `openspec view` dashboard are not ported
-- Package-schema resolution uses a dev-only `vendor/OpenSpec/schemas` path; installed binaries fall back to the embedded schema
+- The interactive `openspec view` dashboard is not ported
 
 ## [0.1.4] - 2026-03-15
 
