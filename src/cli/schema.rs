@@ -3,9 +3,8 @@ use std::path::Path;
 use crate::cli::args::SchemaCommands;
 use crate::core::error::{OpenSpecError, Result};
 use crate::core::schema::{
-    get_embedded_spec_driven_schema, get_package_schemas_dir, get_project_schemas_dir,
-    get_user_schemas_dir, list_schemas, load_schema, resolve_schema, Artifact, SchemaSource,
-    SchemaYaml,
+    get_embedded_spec_driven_schema, get_project_schemas_dir, get_user_schemas_dir, list_schemas,
+    load_schema, resolve_schema, Artifact, SchemaSource, SchemaYaml,
 };
 
 const DEFAULT_SCHEMA: &str = "spec-driven";
@@ -42,7 +41,6 @@ fn resolve_with_shadows(name: &str, project_root: &Path) -> Option<ResolutionJso
             get_project_schemas_dir(project_root).join(name),
         ),
         (SchemaSource::User, get_user_schemas_dir().join(name)),
-        (SchemaSource::Package, get_package_schemas_dir().join(name)),
     ];
 
     let mut existing: Vec<(SchemaSource, String)> = Vec::new();
@@ -608,25 +606,13 @@ mod tests {
     }
 
     // The fork/init commands operate relative to the current working directory.
-    // A process-wide mutex serializes the tests that chdir so they don't race.
-    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
+    // A shared process-wide helper serializes the tests that chdir so they don't race.
     fn fork_into(dir: &Path, source: &str, name: Option<&str>, force: bool) -> Result<()> {
-        let _guard = CWD_LOCK.lock().unwrap();
-        let prev = std::env::current_dir().unwrap();
-        std::env::set_current_dir(dir).unwrap();
-        let result = run_fork(source, name, force, true);
-        std::env::set_current_dir(prev).unwrap();
-        result
+        crate::test_support::with_current_dir(dir, || run_fork(source, name, force, true))
     }
 
     fn init_into(dir: &Path, name: &str, force: bool) -> Result<()> {
-        let _guard = CWD_LOCK.lock().unwrap();
-        let prev = std::env::current_dir().unwrap();
-        std::env::set_current_dir(dir).unwrap();
-        let result = run_init(name, force, true);
-        std::env::set_current_dir(prev).unwrap();
-        result
+        crate::test_support::with_current_dir(dir, || run_init(name, force, true))
     }
 
     #[test]

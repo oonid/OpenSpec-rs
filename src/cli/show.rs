@@ -39,12 +39,70 @@ pub struct ShowChangeOutput {
     pub deltas: Vec<Delta>,
 }
 
-pub fn run_show(name: &str, item_type: Option<&str>, json: bool, _deltas_only: bool) -> Result<()> {
+fn validate_spec_filter_usage_for_output(
+    resolved_type: &str,
+    json: bool,
+    uses_spec_filter_flags: bool,
+) -> Result<()> {
+    if resolved_type == "spec" && uses_spec_filter_flags && !json {
+        return Err(OpenSpecError::Custom(
+            "Options --requirements, --requirement, and --no-scenarios require --json".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SpecFilterOptions {
+    requirements_only: bool,
+    requirement: Option<usize>,
+    no_scenarios: bool,
+}
+
+#[derive(Debug, Clone)]
+struct SpecOutputInput {
+    id: String,
+    title: String,
+    overview: String,
+    requirements: Vec<RequirementJson>,
+    metadata: SpecMetadataOutput,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct SpecMetadataOutput {
+    version: String,
+    format: String,
+    #[serde(rename = "sourcePath", skip_serializing_if = "Option::is_none")]
+    source_path: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct SpecOutput {
+    id: String,
+    title: String,
+    overview: String,
+    #[serde(rename = "requirementCount")]
+    requirement_count: usize,
+    requirements: Vec<RequirementJson>,
+    metadata: SpecMetadataOutput,
+}
+
+pub fn run_show(
+    name: &str,
+    item_type: Option<&str>,
+    json: bool,
+    _deltas_only: bool,
+    requirements: bool,
+    requirement: Option<usize>,
+    no_scenarios: bool,
+) -> Result<()> {
     let project_root = std::env::current_dir()
         .map_err(|e| OpenSpecError::Custom(format!("Failed to get current directory: {}", e)))?;
 
     let changes = get_available_changes(&project_root)?;
     let specs = get_available_specs(&project_root)?;
+    let uses_spec_filter_flags = requirements || requirement.is_some() || no_scenarios;
 
     let is_change = changes.contains(&name.to_string());
     let is_spec = specs.contains(&name.to_string());
@@ -73,9 +131,25 @@ pub fn run_show(name: &str, item_type: Option<&str>, json: bool, _deltas_only: b
         )));
     }
 
+    if resolved_type == "change" && uses_spec_filter_flags {
+        eprintln!(
+            "Warning: Ignoring spec-only flags for change '{}': --requirements, --requirement, --no-scenarios",
+            name
+        );
+    }
+
+    validate_spec_filter_usage_for_output(resolved_type, json, uses_spec_filter_flags)?;
+
     match resolved_type {
         "change" => show_change(&project_root, name, json),
-        "spec" => show_spec(&project_root, name, json),
+        "spec" => show_spec(
+            &project_root,
+            name,
+            json,
+            requirements,
+            requirement,
+            no_scenarios,
+        ),
         _ => Err(OpenSpecError::Custom(format!(
             "Unknown type '{}'. Use 'change' or 'spec'",
             resolved_type
@@ -127,7 +201,14 @@ fn show_change(project_root: &std::path::Path, change_name: &str, json: bool) ->
     Ok(())
 }
 
-fn show_spec(project_root: &std::path::Path, spec_id: &str, json: bool) -> Result<()> {
+fn show_spec(
+    project_root: &std::path::Path,
+    spec_id: &str,
+    json: bool,
+    requirements_only: bool,
+    requirement: Option<usize>,
+    no_scenarios: bool,
+) -> Result<()> {
     let spec_path = project_root
         .join(OPENSPEC_DIR_NAME)
         .join("specs")
@@ -153,25 +234,6 @@ fn show_spec(project_root: &std::path::Path, spec_id: &str, json: bool) -> Resul
             .parse_spec(spec_id)
             .map_err(|e| OpenSpecError::Custom(format!("Failed to parse spec: {}", e)))?;
 
-        #[derive(Debug, Clone, serde::Serialize)]
-        struct SpecMetadataOutput {
-            version: String,
-            format: String,
-            #[serde(rename = "sourcePath", skip_serializing_if = "Option::is_none")]
-            source_path: Option<String>,
-        }
-
-        #[derive(Debug, Clone, serde::Serialize)]
-        struct SpecOutput {
-            id: String,
-            title: String,
-            overview: String,
-            #[serde(rename = "requirementCount")]
-            requirement_count: usize,
-            requirements: Vec<RequirementJson>,
-            metadata: SpecMetadataOutput,
-        }
-
         let metadata = match &spec.metadata {
             Some(m) => SpecMetadataOutput {
                 version: m.version.clone(),
@@ -185,27 +247,33 @@ fn show_spec(project_root: &std::path::Path, spec_id: &str, json: bool) -> Resul
             },
         };
 
-        let output = SpecOutput {
-            id: spec_id.to_string(),
-            title: spec.name,
-            overview: spec.overview,
-            requirement_count: spec.requirements.len(),
-            requirements: spec
-                .requirements
-                .iter()
-                .map(|r| RequirementJson {
-                    text: r.text.clone(),
-                    scenarios: r
-                        .scenarios
-                        .iter()
-                        .map(|s| ScenarioJson {
-                            raw_text: s.raw_text.clone(),
-                        })
-                        .collect(),
-                })
-                .collect(),
-            metadata,
-        };
+        let output = build_filtered_spec_output(
+            SpecOutputInput {
+                id: spec_id.to_string(),
+                title: spec.name,
+                overview: spec.overview,
+                requirements: spec
+                    .requirements
+                    .iter()
+                    .map(|r| RequirementJson {
+                        text: r.text.clone(),
+                        scenarios: r
+                            .scenarios
+                            .iter()
+                            .map(|s| ScenarioJson {
+                                raw_text: s.raw_text.clone(),
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+                metadata,
+            },
+            SpecFilterOptions {
+                requirements_only,
+                requirement,
+                no_scenarios,
+            },
+        )?;
 
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
@@ -213,6 +281,60 @@ fn show_spec(project_root: &std::path::Path, spec_id: &str, json: bool) -> Resul
     }
 
     Ok(())
+}
+
+fn build_filtered_spec_output(
+    input: SpecOutputInput,
+    filters: SpecFilterOptions,
+) -> Result<SpecOutput> {
+    let SpecOutputInput {
+        id,
+        title,
+        overview,
+        requirements,
+        metadata,
+    } = input;
+    let SpecFilterOptions {
+        requirements_only,
+        requirement,
+        no_scenarios,
+    } = filters;
+
+    if requirements_only && requirement.is_some() {
+        return Err(OpenSpecError::Custom(
+            "Options --requirements and --requirement cannot be used together".to_string(),
+        ));
+    }
+
+    let mut requirements = if let Some(index) = requirement {
+        let idx = index
+            .checked_sub(1)
+            .ok_or_else(|| OpenSpecError::Custom(format!("Requirement {} not found", index)))?;
+        if idx >= requirements.len() {
+            return Err(OpenSpecError::Custom(format!(
+                "Requirement {} not found",
+                index
+            )));
+        }
+        vec![requirements[idx].clone()]
+    } else {
+        requirements
+    };
+
+    if requirements_only || no_scenarios {
+        for req in &mut requirements {
+            req.scenarios.clear();
+        }
+    }
+
+    Ok(SpecOutput {
+        id,
+        title,
+        overview,
+        requirement_count: requirements.len(),
+        requirements,
+        metadata,
+    })
 }
 
 fn get_available_changes(project_root: &std::path::Path) -> Result<Vec<String>> {
@@ -490,5 +612,214 @@ mod tests {
         let v: serde_json::Value = serde_json::to_value(&output).unwrap();
         assert_eq!(v["deltaCount"], 2);
         assert!(v.get("delta_count").is_none());
+    }
+
+    #[test]
+    fn test_build_filtered_spec_output_selects_requirement_and_strips_scenarios() {
+        let output = build_filtered_spec_output(
+            SpecOutputInput {
+                id: "spec-a".to_string(),
+                title: "Spec A".to_string(),
+                overview: "Overview".to_string(),
+                requirements: vec![
+                    RequirementJson {
+                        text: "Req 1".to_string(),
+                        scenarios: vec![ScenarioJson {
+                            raw_text: "Scenario 1".to_string(),
+                        }],
+                    },
+                    RequirementJson {
+                        text: "Req 2".to_string(),
+                        scenarios: vec![ScenarioJson {
+                            raw_text: "Scenario 2".to_string(),
+                        }],
+                    },
+                ],
+                metadata: SpecMetadataOutput {
+                    version: "1.0.0".to_string(),
+                    format: "openspec".to_string(),
+                    source_path: None,
+                },
+            },
+            SpecFilterOptions {
+                requirements_only: false,
+                requirement: Some(2),
+                no_scenarios: true,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(output.requirement_count, 1);
+        assert_eq!(output.requirements.len(), 1);
+        assert_eq!(output.requirements[0].text, "Req 2");
+        assert!(output.requirements[0].scenarios.is_empty());
+    }
+
+    #[test]
+    fn test_build_filtered_spec_output_requirements_only_strips_all_scenarios() {
+        let output = build_filtered_spec_output(
+            SpecOutputInput {
+                id: "spec-a".to_string(),
+                title: "Spec A".to_string(),
+                overview: "Overview".to_string(),
+                requirements: vec![
+                    RequirementJson {
+                        text: "Req 1".to_string(),
+                        scenarios: vec![ScenarioJson {
+                            raw_text: "Scenario 1".to_string(),
+                        }],
+                    },
+                    RequirementJson {
+                        text: "Req 2".to_string(),
+                        scenarios: vec![ScenarioJson {
+                            raw_text: "Scenario 2".to_string(),
+                        }],
+                    },
+                ],
+                metadata: SpecMetadataOutput {
+                    version: "1.0.0".to_string(),
+                    format: "openspec".to_string(),
+                    source_path: None,
+                },
+            },
+            SpecFilterOptions {
+                requirements_only: true,
+                requirement: None,
+                no_scenarios: false,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(output.requirement_count, 2);
+        assert_eq!(output.requirements.len(), 2);
+        assert!(output
+            .requirements
+            .iter()
+            .all(|req| req.scenarios.is_empty()));
+    }
+
+    #[test]
+    fn test_build_filtered_spec_output_no_scenarios_strips_all_scenarios() {
+        let output = build_filtered_spec_output(
+            SpecOutputInput {
+                id: "spec-a".to_string(),
+                title: "Spec A".to_string(),
+                overview: "Overview".to_string(),
+                requirements: vec![
+                    RequirementJson {
+                        text: "Req 1".to_string(),
+                        scenarios: vec![ScenarioJson {
+                            raw_text: "Scenario 1".to_string(),
+                        }],
+                    },
+                    RequirementJson {
+                        text: "Req 2".to_string(),
+                        scenarios: vec![ScenarioJson {
+                            raw_text: "Scenario 2".to_string(),
+                        }],
+                    },
+                ],
+                metadata: SpecMetadataOutput {
+                    version: "1.0.0".to_string(),
+                    format: "openspec".to_string(),
+                    source_path: None,
+                },
+            },
+            SpecFilterOptions {
+                requirements_only: false,
+                requirement: None,
+                no_scenarios: true,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(output.requirement_count, 2);
+        assert_eq!(output.requirements.len(), 2);
+        assert!(output
+            .requirements
+            .iter()
+            .all(|req| req.scenarios.is_empty()));
+    }
+
+    #[test]
+    fn test_build_filtered_spec_output_requirement_selection_keeps_scenarios() {
+        let output = build_filtered_spec_output(
+            SpecOutputInput {
+                id: "spec-a".to_string(),
+                title: "Spec A".to_string(),
+                overview: "Overview".to_string(),
+                requirements: vec![
+                    RequirementJson {
+                        text: "Req 1".to_string(),
+                        scenarios: vec![ScenarioJson {
+                            raw_text: "Scenario 1".to_string(),
+                        }],
+                    },
+                    RequirementJson {
+                        text: "Req 2".to_string(),
+                        scenarios: vec![ScenarioJson {
+                            raw_text: "Scenario 2".to_string(),
+                        }],
+                    },
+                ],
+                metadata: SpecMetadataOutput {
+                    version: "1.0.0".to_string(),
+                    format: "openspec".to_string(),
+                    source_path: None,
+                },
+            },
+            SpecFilterOptions {
+                requirements_only: false,
+                requirement: Some(2),
+                no_scenarios: false,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(output.requirement_count, 1);
+        assert_eq!(output.requirements.len(), 1);
+        assert_eq!(output.requirements[0].text, "Req 2");
+        assert_eq!(output.requirements[0].scenarios.len(), 1);
+        assert_eq!(output.requirements[0].scenarios[0].raw_text, "Scenario 2");
+    }
+
+    #[test]
+    fn test_build_filtered_spec_output_rejects_conflicting_flags() {
+        let err = build_filtered_spec_output(
+            SpecOutputInput {
+                id: "spec-a".to_string(),
+                title: "Spec A".to_string(),
+                overview: "Overview".to_string(),
+                requirements: vec![RequirementJson {
+                    text: "Req 1".to_string(),
+                    scenarios: vec![],
+                }],
+                metadata: SpecMetadataOutput {
+                    version: "1.0.0".to_string(),
+                    format: "openspec".to_string(),
+                    source_path: None,
+                },
+            },
+            SpecFilterOptions {
+                requirements_only: true,
+                requirement: Some(1),
+                no_scenarios: false,
+            },
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("cannot be used together"));
+    }
+
+    #[test]
+    fn test_show_spec_filter_flags_require_json() {
+        let err = validate_spec_filter_usage_for_output("spec", false, true).unwrap_err();
+
+        assert!(err.to_string().contains("require --json"));
+    }
+
+    #[test]
+    fn test_show_change_filter_flags_do_not_require_json() {
+        validate_spec_filter_usage_for_output("change", false, true).unwrap();
     }
 }

@@ -173,6 +173,8 @@ fn set_change_inner(
     let base_metadata = existing_metadata.unwrap_or_else(|| ChangeMetadata {
         schema: crate::cli::new_change::DEFAULT_SCHEMA.to_string(),
         created: None,
+        goal: None,
+        affected_areas: None,
         initiative: None,
     });
 
@@ -193,6 +195,8 @@ fn set_change_inner(
             let updated = ChangeMetadata {
                 schema: base_metadata.schema.clone(),
                 created: base_metadata.created.clone(),
+                goal: base_metadata.goal.clone(),
+                affected_areas: base_metadata.affected_areas.clone(),
                 initiative: Some(link),
             };
             write_change_metadata(&metadata_path, &updated)?;
@@ -202,7 +206,7 @@ fn set_change_inner(
 }
 
 /// Resolve the requested initiative into a concrete `{ store, id }` link.
-fn resolve_initiative_link(
+pub(crate) fn resolve_initiative_link(
     initiative_id: &str,
     store: Option<&str>,
     store_path: Option<&str>,
@@ -315,6 +319,8 @@ mod tests {
         let meta = ChangeMetadata {
             schema: "spec-driven".to_string(),
             created: Some("2026-01-01".to_string()),
+            goal: None,
+            affected_areas: None,
             initiative: Some(link("team", "roadmap")),
         };
         write_change_metadata(&path, &meta).unwrap();

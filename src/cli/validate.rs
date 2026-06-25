@@ -1,4 +1,8 @@
 use crate::core::config::OPENSPEC_DIR_NAME;
+use std::collections::VecDeque;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
 use crate::core::error::{OpenSpecError, Result};
 use crate::core::spec_parser::{
     build_code_fence_mask, normalize_requirement_name, parse_delta_spec, RequirementBlock,
@@ -50,20 +54,63 @@ pub struct BulkOutput {
     pub version: String,
 }
 
-pub fn run_validate(
-    name: Option<&str>,
-    all: bool,
-    changes: bool,
-    specs: bool,
-    item_type: Option<&str>,
-    strict: bool,
-    json: bool,
-) -> Result<()> {
+const DEFAULT_VALIDATE_CONCURRENCY: usize = 6;
+
+/// Resolve the validation concurrency, mirroring upstream: the `--concurrency` flag wins when
+/// it is a positive integer, else the `OPENSPEC_CONCURRENCY` env var (positive integer), else
+/// the default. Non-positive / invalid values are ignored rather than used.
+fn resolve_validate_concurrency(flag: Option<usize>) -> usize {
+    flag.filter(|&n| n > 0)
+        .or_else(|| {
+            std::env::var("OPENSPEC_CONCURRENCY")
+                .ok()
+                .and_then(|v| v.trim().parse::<usize>().ok())
+                .filter(|&n| n > 0)
+        })
+        .unwrap_or(DEFAULT_VALIDATE_CONCURRENCY)
+}
+
+#[derive(Debug, Clone)]
+struct BulkValidationTask {
+    id: String,
+    item_type: String,
+    path: PathBuf,
+}
+
+pub struct ValidateOptions<'a> {
+    pub name: Option<&'a str>,
+    pub all: bool,
+    pub changes: bool,
+    pub specs: bool,
+    pub item_type: Option<&'a str>,
+    pub strict: bool,
+    pub json: bool,
+    pub concurrency: Option<usize>,
+}
+
+pub fn run_validate(options: ValidateOptions<'_>) -> Result<()> {
+    let ValidateOptions {
+        name,
+        all,
+        changes,
+        specs,
+        item_type,
+        strict,
+        json,
+        concurrency,
+    } = options;
     let project_root = std::env::current_dir()
         .map_err(|e| OpenSpecError::Custom(format!("Failed to get current directory: {}", e)))?;
 
     if all || changes || specs {
-        return run_bulk_validation(&project_root, all || changes, all || specs, strict, json);
+        return run_bulk_validation(
+            &project_root,
+            all || changes,
+            all || specs,
+            strict,
+            json,
+            resolve_validate_concurrency(concurrency),
+        );
     }
 
     let name = name.ok_or_else(|| {
@@ -170,12 +217,103 @@ pub fn run_validate(
     Ok(())
 }
 
+fn execute_bounded_tasks<T, R, F>(tasks: Vec<T>, concurrency: usize, worker: F) -> Result<Vec<R>>
+where
+    T: Send + 'static,
+    R: Send + 'static,
+    F: Fn(T) -> R + Send + Sync + 'static,
+{
+    if tasks.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let worker_count = std::cmp::min(concurrency.max(1), tasks.len());
+    let queue = Arc::new(Mutex::new(VecDeque::from(tasks)));
+    let worker = Arc::new(worker);
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    let mut handles = Vec::new();
+    for _ in 0..worker_count {
+        let queue = Arc::clone(&queue);
+        let worker = Arc::clone(&worker);
+        let tx = tx.clone();
+        let handle = std::thread::spawn(move || loop {
+            let task = {
+                let mut queue = queue.lock().expect("bulk validation queue lock poisoned");
+                queue.pop_front()
+            };
+
+            let Some(task) = task else {
+                break;
+            };
+
+            let result = worker(task);
+            if tx.send(result).is_err() {
+                break;
+            }
+        });
+        handles.push(handle);
+    }
+    drop(tx);
+
+    let results: Vec<R> = rx.into_iter().collect();
+    for handle in handles {
+        handle
+            .join()
+            .map_err(|_| OpenSpecError::Custom("Validation worker panicked".to_string()))?;
+    }
+
+    Ok(results)
+}
+
+fn execute_bulk_validation_tasks(
+    tasks: Vec<BulkValidationTask>,
+    strict: bool,
+    concurrency: usize,
+) -> Result<Vec<BulkItemResult>> {
+    execute_bounded_tasks(tasks, concurrency, move |task| {
+        let start = std::time::Instant::now();
+        let outcome = if task.item_type == "change" {
+            validate_change(&task.path, strict)
+        } else {
+            validate_spec(&task.path, strict)
+        };
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        match outcome {
+            Ok(report) => BulkItemResult {
+                id: task.id,
+                item_type: task.item_type,
+                valid: report.valid,
+                issues: report.issues,
+                duration_ms,
+            },
+            Err(err) => BulkItemResult {
+                id: task.id,
+                item_type: task.item_type,
+                valid: false,
+                issues: vec![ValidationIssue {
+                    level: "ERROR".to_string(),
+                    path: "file".to_string(),
+                    message: err.to_string(),
+                }],
+                duration_ms,
+            },
+        }
+    })
+}
+
+fn sort_bulk_results(results: &mut [BulkItemResult]) {
+    results.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.item_type.cmp(&b.item_type)));
+}
+
 fn run_bulk_validation(
     project_root: &std::path::Path,
     validate_changes: bool,
     validate_specs: bool,
     strict: bool,
     json: bool,
+    concurrency: usize,
 ) -> Result<()> {
     let change_ids = if validate_changes {
         get_available_changes(project_root)?
@@ -232,58 +370,35 @@ fn run_bulk_validation(
         return Ok(());
     }
 
-    let mut results: Vec<BulkItemResult> = Vec::new();
-    let mut passed = 0;
-    let mut failed = 0;
-
+    let mut tasks: Vec<BulkValidationTask> = Vec::new();
     for id in &change_ids {
-        let start = std::time::Instant::now();
-        let change_dir = project_root
-            .join(OPENSPEC_DIR_NAME)
-            .join("changes")
-            .join(id);
-        let report = validate_change(&change_dir, strict)?;
-        let duration_ms = start.elapsed().as_millis() as u64;
-        let valid = report.valid;
-        if valid {
-            passed += 1;
-        } else {
-            failed += 1;
-        }
-        results.push(BulkItemResult {
+        tasks.push(BulkValidationTask {
             id: id.clone(),
             item_type: "change".to_string(),
-            valid,
-            issues: report.issues,
-            duration_ms,
+            path: project_root
+                .join(OPENSPEC_DIR_NAME)
+                .join("changes")
+                .join(id),
         });
     }
-
     for id in &spec_ids {
-        let start = std::time::Instant::now();
-        let spec_path = project_root
-            .join(OPENSPEC_DIR_NAME)
-            .join("specs")
-            .join(id)
-            .join("spec.md");
-        let report = validate_spec(&spec_path, strict)?;
-        let duration_ms = start.elapsed().as_millis() as u64;
-        let valid = report.valid;
-        if valid {
-            passed += 1;
-        } else {
-            failed += 1;
-        }
-        results.push(BulkItemResult {
+        tasks.push(BulkValidationTask {
             id: id.clone(),
             item_type: "spec".to_string(),
-            valid,
-            issues: report.issues,
-            duration_ms,
+            path: project_root
+                .join(OPENSPEC_DIR_NAME)
+                .join("specs")
+                .join(id)
+                .join("spec.md"),
         });
     }
 
-    results.sort_by(|a, b| a.id.cmp(&b.id));
+    let mut results = execute_bulk_validation_tasks(tasks, strict, concurrency)?;
+
+    let passed = results.iter().filter(|result| result.valid).count();
+    let failed = results.len() - passed;
+
+    sort_bulk_results(&mut results);
 
     if json {
         let output = BulkOutput {
@@ -860,6 +975,37 @@ fn count_scenarios(block_raw: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    #[test]
+    fn resolve_concurrency_flag_env_default() {
+        // This test owns the OPENSPEC_CONCURRENCY env var (no other test touches it).
+        std::env::remove_var("OPENSPEC_CONCURRENCY");
+        assert_eq!(resolve_validate_concurrency(Some(3)), 3);
+        // Non-positive flag is ignored → default (no env set).
+        assert_eq!(
+            resolve_validate_concurrency(Some(0)),
+            DEFAULT_VALIDATE_CONCURRENCY
+        );
+        assert_eq!(
+            resolve_validate_concurrency(None),
+            DEFAULT_VALIDATE_CONCURRENCY
+        );
+        // Env fallback when no flag.
+        std::env::set_var("OPENSPEC_CONCURRENCY", "4");
+        assert_eq!(resolve_validate_concurrency(None), 4);
+        // Flag wins over env.
+        assert_eq!(resolve_validate_concurrency(Some(2)), 2);
+        // Invalid env is ignored → default.
+        std::env::set_var("OPENSPEC_CONCURRENCY", "bogus");
+        assert_eq!(
+            resolve_validate_concurrency(None),
+            DEFAULT_VALIDATE_CONCURRENCY
+        );
+        std::env::remove_var("OPENSPEC_CONCURRENCY");
+    }
 
     #[test]
     fn test_contains_shall_or_must() {
@@ -1007,5 +1153,74 @@ mod tests {
 
         let strict = validate_spec(&spec_path, true).unwrap();
         assert!(!strict.valid);
+    }
+    #[test]
+    fn test_sort_bulk_results_orders_by_id_then_type() {
+        let mut results = vec![
+            BulkItemResult {
+                id: "beta".to_string(),
+                item_type: "spec".to_string(),
+                valid: true,
+                issues: vec![],
+                duration_ms: 1,
+            },
+            BulkItemResult {
+                id: "alpha".to_string(),
+                item_type: "spec".to_string(),
+                valid: true,
+                issues: vec![],
+                duration_ms: 1,
+            },
+            BulkItemResult {
+                id: "alpha".to_string(),
+                item_type: "change".to_string(),
+                valid: true,
+                issues: vec![],
+                duration_ms: 1,
+            },
+        ];
+
+        sort_bulk_results(&mut results);
+
+        assert_eq!(results[0].id, "alpha");
+        assert_eq!(results[0].item_type, "change");
+        assert_eq!(results[1].id, "alpha");
+        assert_eq!(results[1].item_type, "spec");
+        assert_eq!(results[2].id, "beta");
+    }
+
+    #[test]
+    fn test_execute_bounded_tasks_respects_concurrency_limit() {
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+
+        let mut results = execute_bounded_tasks((0..8).collect::<Vec<_>>(), 3, {
+            let active = Arc::clone(&active);
+            let max_active = Arc::clone(&max_active);
+            move |task| {
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                let mut observed = max_active.load(Ordering::SeqCst);
+                while current > observed {
+                    match max_active.compare_exchange(
+                        observed,
+                        current,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) {
+                        Ok(_) => break,
+                        Err(value) => observed = value,
+                    }
+                }
+
+                std::thread::sleep(Duration::from_millis(20));
+                active.fetch_sub(1, Ordering::SeqCst);
+                task
+            }
+        })
+        .unwrap();
+
+        results.sort();
+        assert_eq!(results, (0..8).collect::<Vec<_>>());
+        assert!(max_active.load(Ordering::SeqCst) <= 3);
     }
 }

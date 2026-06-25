@@ -2,6 +2,16 @@ use clap::{Parser, Subcommand};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+fn parse_positive_usize(value: &str) -> std::result::Result<usize, String> {
+    let parsed = value
+        .parse::<usize>()
+        .map_err(|_| format!("Invalid positive integer: {}", value))?;
+    if parsed == 0 {
+        return Err("Concurrency must be at least 1".to_string());
+    }
+    Ok(parsed)
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "openspec")]
 #[command(author, version, about, long_about = None)]
@@ -10,8 +20,15 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 
-    #[arg(long, global = true, env = "NO_COLOR")]
+    #[arg(long, global = true)]
     pub no_color: bool,
+
+    #[arg(
+        long = "no-interactive",
+        global = true,
+        help = "Disable interactive prompts"
+    )]
+    pub no_interactive: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -113,6 +130,19 @@ pub enum Commands {
 
         #[arg(long, help = "Show only deltas (JSON only)")]
         deltas_only: bool,
+
+        #[arg(long, help = "JSON only: Show only requirements (exclude scenarios)")]
+        requirements: bool,
+
+        #[arg(
+            long = "requirement",
+            short = 'r',
+            help = "JSON only: Show a specific requirement by ID (1-based)"
+        )]
+        requirement: Option<usize>,
+
+        #[arg(long, help = "JSON only: Exclude scenario content")]
+        no_scenarios: bool,
     },
 
     #[command(about = "Validate changes and specs")]
@@ -137,6 +167,9 @@ pub enum Commands {
 
         #[arg(long, help = "Output validation results as JSON")]
         json: bool,
+
+        #[arg(long, help = "Maximum number of validation workers", value_parser = parse_positive_usize)]
+        concurrency: Option<usize>,
     },
 
     #[command(about = "Archive a completed change and update main specs")]
@@ -154,17 +187,17 @@ pub enum Commands {
         no_validate: bool,
     },
 
-    #[command(about = "View and modify global OpenSpec configuration")]
-    Config {
-        #[arg(long, help = "Set a configuration value (key=value)")]
-        set: Option<String>,
+    #[command(about = "Submit feedback about OpenSpec")]
+    Feedback {
+        #[arg(help = "Feedback message")]
+        message: String,
 
-        #[arg(long, help = "Get a configuration value")]
-        get: Option<String>,
-
-        #[arg(long, help = "List all configuration values")]
-        list: bool,
+        #[arg(long, help = "Detailed description for the feedback")]
+        body: Option<String>,
     },
+
+    #[command(subcommand, about = "View and modify global OpenSpec configuration")]
+    Config(ConfigCommands),
 
     #[command(subcommand, about = "Create new items")]
     New(NewCommands),
@@ -206,6 +239,54 @@ pub enum SetCommands {
 
         #[arg(long, help = "Output as JSON")]
         json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigCommands {
+    #[command(about = "Show the global config file path")]
+    Path,
+
+    #[command(about = "List all configuration values")]
+    List {
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
+    },
+
+    #[command(about = "Get a configuration value")]
+    Get {
+        #[arg(help = "Configuration key")]
+        key: String,
+    },
+
+    #[command(about = "Set a configuration value")]
+    Set {
+        #[arg(help = "Configuration key")]
+        key: String,
+
+        #[arg(help = "Configuration value")]
+        value: String,
+    },
+
+    #[command(about = "Unset a configuration value")]
+    Unset {
+        #[arg(help = "Configuration key")]
+        key: String,
+    },
+
+    #[command(about = "Reset configuration values")]
+    Reset {
+        #[arg(long, help = "Reset the entire global config")]
+        all: bool,
+    },
+
+    #[command(about = "Edit the global config in your editor")]
+    Edit,
+
+    #[command(about = "Show or set the active profile")]
+    Profile {
+        #[arg(help = "Preset profile name")]
+        preset: Option<String>,
     },
 }
 
@@ -272,6 +353,30 @@ pub enum NewCommands {
 
         #[arg(long, help = "Workflow schema to use")]
         schema: Option<String>,
+
+        #[arg(long, help = "Workspace product goal to store with the change")]
+        goal: Option<String>,
+
+        #[arg(
+            long = "affected-areas",
+            help = "Comma-separated affected workspace link names"
+        )]
+        affected_areas: Option<String>,
+
+        #[arg(long, help = "Link the repo-local change to an initiative")]
+        initiative: Option<String>,
+
+        #[arg(long, help = "Context store id for --initiative")]
+        store: Option<String>,
+
+        #[arg(
+            long = "store-path",
+            help = "Existing local context store root for --initiative"
+        )]
+        store_path: Option<String>,
+
+        #[arg(long, help = "Output as JSON")]
+        json: bool,
     },
 }
 
@@ -497,7 +602,17 @@ fn get_command_path(cli: &Cli) -> String {
         Commands::Show { .. } => "show".to_string(),
         Commands::Validate { .. } => "validate".to_string(),
         Commands::Archive { .. } => "archive".to_string(),
-        Commands::Config { .. } => "config".to_string(),
+        Commands::Feedback { .. } => "feedback".to_string(),
+        Commands::Config(cmd) => match cmd {
+            ConfigCommands::Path => "config:path".to_string(),
+            ConfigCommands::List { .. } => "config:list".to_string(),
+            ConfigCommands::Get { .. } => "config:get".to_string(),
+            ConfigCommands::Set { .. } => "config:set".to_string(),
+            ConfigCommands::Unset { .. } => "config:unset".to_string(),
+            ConfigCommands::Reset { .. } => "config:reset".to_string(),
+            ConfigCommands::Edit => "config:edit".to_string(),
+            ConfigCommands::Profile { .. } => "config:profile".to_string(),
+        },
         Commands::New(NewCommands::Change { .. }) => "new:change".to_string(),
         Commands::Completion(cmd) => match cmd {
             CompletionCommands::Generate { .. } => "completion:generate".to_string(),
@@ -612,13 +727,24 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             json,
             r#type,
             deltas_only,
+            requirements,
+            requirement,
+            no_scenarios,
         } => {
             let name = name.as_deref().ok_or_else(|| {
                 crate::core::error::OpenSpecError::Custom(
                     "Missing required argument <name>".to_string(),
                 )
             })?;
-            crate::cli::show::run_show(name, r#type.as_deref(), json, deltas_only)?;
+            crate::cli::show::run_show(
+                name,
+                r#type.as_deref(),
+                json,
+                deltas_only,
+                requirements,
+                requirement,
+                no_scenarios,
+            )?;
         }
         Commands::Validate {
             name,
@@ -628,16 +754,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             r#type,
             strict,
             json,
+            concurrency,
         } => {
-            crate::cli::validate::run_validate(
-                name.as_deref(),
+            crate::cli::validate::run_validate(crate::cli::validate::ValidateOptions {
+                name: name.as_deref(),
                 all,
                 changes,
                 specs,
-                r#type.as_deref(),
+                item_type: r#type.as_deref(),
                 strict,
                 json,
-            )?;
+                concurrency,
+            })?;
         }
         Commands::Archive {
             name,
@@ -647,19 +775,57 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             crate::cli::archive::run_archive(name.as_deref(), yes, skip_specs, no_validate)?;
         }
-        Commands::Config { set, get, list } => {
-            crate::cli::config::run_config(set.as_deref(), get.as_deref(), list)?;
+        Commands::Feedback { message, body } => {
+            crate::cli::feedback::run_feedback(&message, body.as_deref())?;
         }
+        Commands::Config(cmd) => match cmd {
+            ConfigCommands::Path => {
+                crate::cli::config::run_config_path()?;
+            }
+            ConfigCommands::List { json } => {
+                crate::cli::config::run_config_list(json)?;
+            }
+            ConfigCommands::Get { key } => {
+                crate::cli::config::run_config_get(&key)?;
+            }
+            ConfigCommands::Set { key, value } => {
+                crate::cli::config::run_config_set(&key, &value)?;
+            }
+            ConfigCommands::Unset { key } => {
+                crate::cli::config::run_config_unset(&key)?;
+            }
+            ConfigCommands::Reset { all } => {
+                crate::cli::config::run_config_reset(all)?;
+            }
+            ConfigCommands::Edit => {
+                crate::cli::config::run_config_edit()?;
+            }
+            ConfigCommands::Profile { preset } => {
+                crate::cli::config::run_config_profile(preset.as_deref())?;
+            }
+        },
         Commands::New(NewCommands::Change {
             name,
             description,
             schema,
+            goal,
+            affected_areas,
+            initiative,
+            store,
+            store_path,
+            json,
         }) => {
-            crate::cli::new_change::run_new_change(
-                &name,
-                description.as_deref(),
-                schema.as_deref(),
-            )?;
+            crate::cli::new_change::run_new_change(crate::cli::new_change::NewChangeOptions {
+                name: &name,
+                description: description.as_deref(),
+                schema: schema.as_deref(),
+                goal: goal.as_deref(),
+                affected_areas: affected_areas.as_deref(),
+                initiative: initiative.as_deref(),
+                store: store.as_deref(),
+                store_path: store_path.as_deref(),
+                json,
+            })?;
         }
         Commands::Completion(cmd) => match cmd {
             CompletionCommands::Generate { shell } => {
