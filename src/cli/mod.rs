@@ -3,6 +3,7 @@ mod args;
 mod completion;
 mod config;
 mod context_store;
+mod feedback;
 mod init;
 mod initiative;
 mod instructions;

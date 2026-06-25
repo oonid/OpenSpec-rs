@@ -50,6 +50,10 @@ pub struct ChangeMetadata {
     #[serde(default)]
     pub created: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affected_areas: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initiative: Option<InitiativeLink>,
 }
 
@@ -254,7 +258,7 @@ pub fn get_user_schemas_dir() -> std::path::PathBuf {
 }
 
 pub fn get_package_schemas_dir() -> std::path::PathBuf {
-    std::path::PathBuf::from("vendor/OpenSpec/schemas")
+    std::path::PathBuf::from("embedded:package-schemas")
 }
 
 pub fn get_embedded_spec_driven_schema() -> Result<SchemaYaml> {
@@ -286,17 +290,6 @@ pub fn resolve_schema(name: &str, project_root: Option<&Path>) -> Result<Resolve
             schema,
             path: user_schema_path.display().to_string(),
             source: SchemaSource::User,
-        });
-    }
-
-    let package_dir = get_package_schemas_dir();
-    let package_schema_path = package_dir.join(name).join("schema.yaml");
-    if package_schema_path.exists() {
-        let schema = load_schema(&package_schema_path)?;
-        return Ok(ResolvedSchema {
-            schema,
-            path: package_schema_path.display().to_string(),
-            source: SchemaSource::Package,
         });
     }
 
@@ -375,35 +368,6 @@ pub fn list_schemas(project_root: Option<&Path>) -> Vec<SchemaInfo> {
                                         .map(|a| a.id.clone())
                                         .collect(),
                                     source: SchemaSource::User,
-                                });
-                                seen_names.insert(name);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let package_dir = get_package_schemas_dir();
-    if package_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(&package_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if !seen_names.contains(&name) {
-                        let schema_path = entry.path().join("schema.yaml");
-                        if schema_path.exists() {
-                            if let Ok(schema) = load_schema(&schema_path) {
-                                schemas.push(SchemaInfo {
-                                    name: name.clone(),
-                                    description: schema.description.clone().unwrap_or_default(),
-                                    artifacts: schema
-                                        .artifacts
-                                        .iter()
-                                        .map(|a| a.id.clone())
-                                        .collect(),
-                                    source: SchemaSource::Package,
                                 });
                                 seen_names.insert(name);
                             }
@@ -627,6 +591,13 @@ artifacts:
     }
 
     #[test]
+    fn test_resolve_schema_spec_driven_uses_embedded_path() {
+        let resolved = resolve_schema("spec-driven", None).unwrap();
+        assert_eq!(resolved.path, "embedded:spec-driven.yaml");
+        assert_eq!(resolved.source, SchemaSource::Package);
+    }
+
+    #[test]
     fn test_resolve_schema_not_found() {
         let result = resolve_schema("nonexistent-schema", None);
         assert!(result.is_err());
@@ -662,6 +633,8 @@ artifacts:
         let meta: ChangeMetadata = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(meta.schema, "spec-driven");
         assert_eq!(meta.created.as_deref(), Some("2026-01-01"));
+        assert!(meta.goal.is_none());
+        assert!(meta.affected_areas.is_none());
         assert!(meta.initiative.is_none());
 
         // Serializing back should NOT emit an `initiative` key.
@@ -676,6 +649,8 @@ artifacts:
         let meta = ChangeMetadata {
             schema: "spec-driven".to_string(),
             created: Some("2026-01-01".to_string()),
+            goal: Some("Ship telemetry".to_string()),
+            affected_areas: Some(vec!["cli".to_string(), "docs".to_string()]),
             initiative: Some(InitiativeLink {
                 store: "team".to_string(),
                 id: "roadmap".to_string(),
@@ -684,6 +659,11 @@ artifacts:
         let serialized = serde_yaml::to_string(&meta).unwrap();
         let reparsed: ChangeMetadata = serde_yaml::from_str(&serialized).unwrap();
         assert_eq!(reparsed, meta);
+        assert_eq!(reparsed.goal.as_deref(), Some("Ship telemetry"));
+        assert_eq!(
+            reparsed.affected_areas.as_deref(),
+            Some(&["cli".to_string(), "docs".to_string()][..])
+        );
         let link = reparsed.initiative.unwrap();
         assert_eq!(link.store, "team");
         assert_eq!(link.id, "roadmap");

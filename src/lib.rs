@@ -4,3 +4,6 @@ pub mod core;
 pub mod telemetry;
 pub mod templates;
 pub mod utils;
+
+#[cfg(test)]
+pub mod test_support;

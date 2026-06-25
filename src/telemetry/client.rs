@@ -7,7 +7,7 @@ const POSTHOG_API_KEY: &str = "phc_Hthu8YvaIJ9QaFKyTG4TbVwkbd5ktcAFzVTKeMmoW2g";
 const POSTHOG_HOST: &str = "https://edge.openspec.dev";
 
 static ANONYMOUS_ID: OnceLock<String> = OnceLock::new();
-static PENDING_EVENTS: OnceLock<Mutex<Vec<PostHogEvent>>> = OnceLock::new();
+static PENDING_EVENTS: OnceLock<Mutex<Vec<serde_json::Value>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TelemetryConfig {
@@ -135,9 +135,11 @@ pub fn track_command(command_name: &str, version: &str) {
         },
     };
 
+    let event_value = serde_json::to_value(&event).unwrap_or(serde_json::Value::Null);
+
     if let Some(pending) = PENDING_EVENTS.get() {
         if let Ok(mut events) = pending.lock() {
-            events.push(event);
+            events.push(event_value);
             return;
         }
     }

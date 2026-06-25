@@ -95,12 +95,12 @@ mod tests {
         let schema = get_embedded_spec_driven_schema().unwrap();
         let resolved = ResolvedSchema {
             schema,
-            path: "vendor/OpenSpec/schemas/spec-driven/schema.yaml".to_string(),
-            source: crate::core::schema::SchemaSource::Package,
+            path: "/tmp/custom-schema/schema.yaml".to_string(),
+            source: crate::core::schema::SchemaSource::Project,
         };
         assert_eq!(
             template_reference(&resolved, "proposal.md"),
-            "vendor/OpenSpec/schemas/spec-driven/templates/proposal.md"
+            "/tmp/custom-schema/templates/proposal.md"
         );
     }
 }
